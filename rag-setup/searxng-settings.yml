@@ -1,0 +1,76 @@
+use_default_settings: true
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "chimera-searxng-secret-key-change-me"
+  limiter: false
+
+ui:
+  default_theme: simple
+  results_on_new_tab: false
+
+search:
+  safe_search: 0
+  autocomplete: "duckduckgo"
+  formats:
+    - html
+    - json
+
+engines:
+  # Reliable - no API keys needed, rarely throttle
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: arx
+    disabled: false
+
+  - name: wikidata
+    engine: wikidata
+    shortcut: wd
+    disabled: false
+
+  - name: currency
+    engine: currency_convert
+    shortcut: cc
+    disabled: false
+
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+
+  - name: pypi
+    engine: pypi
+    shortcut: pip
+    disabled: false
+
+  # Can throttle but useful as fallback
+  - name: google
+    engine: google
+    shortcut: go
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: bi
+    disabled: false
+
+  - name: brave
+    engine: brave
+    shortcut: br
+    disabled: false
+
+  - name: mojeek
+    engine: mojeek
+    shortcut: mj
+    disabled: false

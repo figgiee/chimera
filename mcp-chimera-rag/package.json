@@ -1,0 +1,15 @@
+{
+  "name": "mcp-chimera-rag",
+  "version": "2.0.0",
+  "description": "MCP server bridging LM Studio to the Chimera RAG pipeline",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["mcp", "rag", "lm-studio"],
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  }
+}

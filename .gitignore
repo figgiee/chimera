@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+*.env.local
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes (local data)
+rag-setup/documents/*
+!rag-setup/documents/.gitkeep
+
+# Build artifacts
+*.egg-info/
+*.egg
+build/
+
+# Logs
+*.log
+
+# External MCP repos (cloned separately)
+mcp-pdf-reader/
+mcp-screenshot/
+mcp-searxng/
+mcp-shell/
