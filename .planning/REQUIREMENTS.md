@@ -84,15 +84,36 @@
 
 ## Traceability
 
-| Requirement | Phase |
-|-------------|-------|
-| CHAT-01..10 | TBD |
-| TOOL-01..03 | TBD |
-| SYN-01..04 | TBD |
-| SESS-01..04 | TBD |
-| HLTH-01..03 | TBD |
-| KNOW-01..03 | TBD |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CHAT-01 | Phase 2 | Pending |
+| CHAT-02 | Phase 2 | Pending |
+| CHAT-03 | Phase 2 | Pending |
+| CHAT-04 | Phase 2 | Pending |
+| CHAT-05 | Phase 2 | Pending |
+| CHAT-06 | Phase 2 | Pending |
+| CHAT-07 | Phase 2 | Pending |
+| CHAT-08 | Phase 2 | Pending |
+| CHAT-09 | Phase 2 | Pending |
+| CHAT-10 | Phase 2 | Pending |
+| TOOL-01 | Phase 3 | Pending |
+| TOOL-02 | Phase 3 | Pending |
+| TOOL-03 | Phase 3 | Pending |
+| SYN-01 | Phase 3 | Pending |
+| SYN-02 | Phase 3 | Pending |
+| SYN-03 | Phase 3 | Pending |
+| SYN-04 | Phase 3 | Pending |
+| SESS-01 | Phase 4 | Pending |
+| SESS-02 | Phase 4 | Pending |
+| SESS-03 | Phase 4 | Pending |
+| SESS-04 | Phase 4 | Pending |
+| HLTH-01 | Phase 4 | Pending |
+| HLTH-02 | Phase 4 | Pending |
+| HLTH-03 | Phase 4 | Pending |
+| KNOW-01 | Phase 4 | Pending |
+| KNOW-02 | Phase 4 | Pending |
+| KNOW-03 | Phase 4 | Pending |
 
 ---
 
-*27 requirements across 6 categories*
+*27 requirements across 6 categories — all mapped to phases 2-4*

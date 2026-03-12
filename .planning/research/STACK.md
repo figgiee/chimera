@@ -3,117 +3,126 @@
 **Project:** Chimera Web UI
 **Researched:** 2026-03-12
 **Dimension:** Frontend stack for local AI chat interface
-**Overall Confidence:** HIGH
+**Overall Confidence:** HIGH (all versions verified against npm registry and official docs)
+
+---
+
+## Context: What Already Exists (Do Not Replace)
+
+The backend is a zero-dependency Node.js HTTP server on port 3210. It already has:
+- `POST /chat/stream` — SSE streaming endpoint (primary integration point)
+- `POST /chat` — JSON (non-streaming) response
+- `GET /health` — liveness check
+- Session management endpoints
+
+The frontend stack is purely additive. Nothing in the existing server changes except one new static-file handler.
+
+---
 
 ## Recommended Stack
 
-### Framework: SvelteKit + Svelte 5
+### Core Framework
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| Svelte | ^5.53 | UI framework | Smallest bundle size, true reactivity without virtual DOM, runes model is ideal for streaming state. Open WebUI validates this choice at scale. |
-| SvelteKit | ^2.53 | App framework | File-based routing, adapter-static for building to static files, first-party Vite integration. |
-| @sveltejs/adapter-static | ^3.0 | Build target | Prerenders to pure HTML/CSS/JS that the existing Node.js chat server can serve as static files. Zero runtime dependency. |
-| Vite | ^6.x | Build tool | Ships with SvelteKit. Fast HMR, production bundling. |
+| Svelte | 5.53.x | UI component model | Compile-time reactivity: no virtual DOM, ~1.6 KB runtime. Runes API (`$state`, `$derived`, `$effect`) is stable and ideal for streaming state. Open WebUI (40k+ stars) validates this choice at production scale. |
+| SvelteKit | 2.54.x | App framework + build | File-based routing, first-party Vite integration, `adapter-static` produces a plain `build/` folder the existing Node.js server can serve. Latest release: 2.54.0 (March 11, 2026). |
+| @sveltejs/adapter-static | 3.x | Build target | Prerenders the entire app to pure HTML/CSS/JS. Zero runtime dependency in production. The existing Node.js server reads from `build/` with ~20 lines of `fs.readFile` code. |
+| Vite | 8.x (via SvelteKit) | Dev server + bundler | Ships with SvelteKit 2.53.0+. Vite 8 support is confirmed. Dev server proxy feature solves CORS to port 3210 during development. |
 
-**Why SvelteKit over React/Vite:**
+**Why SvelteKit over alternatives:**
 
-1. **Bundle size matters for local-first.** Svelte compiles away the framework -- the runtime is effectively zero. React ships ~45kB minified+gzipped just for react + react-dom. For a local tool, every byte is waste the user pays for.
+1. **Bundle size.** Svelte compiles away the framework. React ships ~45 KB minified+gzipped for react + react-dom alone. For a local tool, every byte is waste the user pays with startup time.
 
-2. **Streaming state is simpler.** Svelte 5 runes (`$state`, `$derived`) handle reactive streaming data with zero boilerplate. React requires `useState` + `useEffect` + `useRef` gymnastics for SSE streaming. Svelte just works: assign to a `$state` variable and the DOM updates.
+2. **Streaming state.** Svelte 5 runes handle reactive streaming data with no boilerplate. React requires `useState` + `useEffect` + `useRef` choreography for SSE streaming. Assign to a `$state` variable; DOM updates automatically.
 
-3. **Open WebUI validates the choice.** The most popular open-source AI chat UI (40k+ GitHub stars) uses SvelteKit. They chose it for the same reasons. AnythingLLM uses React/Vite but has a much heavier dependency tree (see Alternatives Considered below).
+3. **Industry validation.** Open WebUI (the most popular open-source AI chat UI) uses SvelteKit. The same evaluation was done and the same conclusion reached.
 
-4. **Static output is first-class.** `adapter-static` is mature and well-documented. `npm run build` produces a `build/` directory of static files. Add one route in chimera-chat.js to serve them.
+4. **Static output is first-class.** `adapter-static` is mature and well-documented. `npm run build` → `build/` directory. Add one handler in `chimera-chat.js`.
 
-5. **DX advantage.** `.svelte` single-file components with scoped CSS are cleaner than JSX + CSS modules. Less context switching, less boilerplate.
+5. **DX.** `.svelte` single-file components with scoped CSS are cleaner than JSX + CSS modules. Less context switching, less boilerplate.
 
-**Why NOT React:**
+**Why NOT React/Next.js:** React ecosystem overhead is unjustified for a local tool. Next.js requires a Node.js server at runtime; `adapter-static` gives a drop-in static folder with no runtime. AnythingLLM (React + Vite) has 40+ production dependencies including moment.js, lodash, recharts, react-beautiful-dnd, and onnxruntime-web — dependency bloat for a chat UI.
 
-- AnythingLLM's package.json reveals 40+ dependencies including moment.js, lodash, recharts, react-beautiful-dnd, and onnxruntime-web. That is dependency bloat for a chat UI.
-- `@microsoft/fetch-event-source` is needed because native EventSource does not support POST requests. In Svelte, a simple fetch + ReadableStream handles this natively.
-- React 18 is the current stable; React 19 has had a rocky adoption. The ecosystem is in transition.
-
-### CSS: Tailwind CSS v4
+### CSS Framework
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| tailwindcss | ^4.2 | Utility CSS | v4 has zero-config setup, first-party Vite plugin, 5x faster builds. One CSS import line, no tailwind.config.js needed. |
+| Tailwind CSS | 4.2.x | Utility-first styling | v4 eliminated `tailwind.config.js` — configuration lives in CSS via `@theme`. First-party `@tailwindcss/vite` plugin. Single `@import "tailwindcss"` in `app.css`. 5x faster builds vs v3. |
+| @tailwindcss/vite | 4.2.x | Vite integration | Replaces the PostCSS pipeline entirely. Required for Tailwind v4 with SvelteKit. |
 
 **Why Tailwind v4 specifically:**
+- shadcn-svelte (component library below) expects Tailwind v4. Using v3 creates friction.
+- No config file means the project stays lean.
+- Utility classes keep styles colocated with markup in `.svelte` files — readable without context switching.
+- Confirmed current version: 4.2.x (official Tailwind docs, March 2026).
 
-- v4 eliminated the config file -- just `@import "tailwindcss"` in your CSS. Perfect for keeping the project lean.
-- First-party `@tailwindcss/vite` plugin integrates natively with SvelteKit's Vite pipeline.
-- shadcn-svelte (see below) expects Tailwind v4.
-- Utility classes keep styles colocated with markup in `.svelte` files.
-
-**Why NOT other CSS approaches:**
-
-- Plain CSS: Too much boilerplate for a chat UI with many states (loading, streaming, error, collapsed, expanded).
-- CSS-in-JS: Wrong ecosystem (React-centric), runtime overhead.
+**Why NOT other approaches:**
+- Plain CSS: Too much boilerplate for a chat UI with many states (loading, streaming, error, collapsed activity blocks, expanded activity blocks).
+- UnoCSS: Valid alternative but smaller ecosystem; the shadcn-svelte integration is smoother with Tailwind.
 - Tailwind v3: Outdated. v4 is stable and has fewer moving parts.
 
 ### UI Components: shadcn-svelte
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| shadcn-svelte | ^1.1 | Component primitives | Copy-paste components, not a dependency. Full control over styling. Built on bits-ui (headless). |
-| bits-ui | ^2.16 | Headless primitives | Accessible, unstyled component logic (dialog, dropdown, tooltip, etc.). shadcn-svelte depends on this. |
+| shadcn-svelte | CLI-based (no runtime version) | Component scaffold | Not a dependency — a CLI that copies component source code into your project. Full ownership, no version lock-in, no breaking upstream updates. Svelte 5 + Tailwind v4 support confirmed current. |
+| bits-ui | latest (pulled by shadcn-svelte) | Headless primitives | Accessible, unstyled component logic (Dialog, Dropdown, Tooltip, etc.). shadcn-svelte is built on top of bits-ui. ARIA attributes and keyboard navigation included. |
 
 **Why shadcn-svelte:**
-
-1. **Not a dependency -- a starting point.** Components are copied into your project. You own them. No version lock-in, no breaking updates.
-2. **Built on bits-ui.** Accessible headless primitives with keyboard navigation, focus management, ARIA attributes. You get a11y for free.
-3. **Tailwind v4 + Svelte 5 native.** Latest version supports both.
-4. **Only what you need.** Add components individually: `npx shadcn-svelte@latest add button dialog sheet`. No unused component bloat.
-5. **Perfect for chat UI patterns.** Sheet (sidebar), Dialog (settings), ScrollArea (message list), Button, Input, Tooltip -- all available.
+1. **You own the code.** Components are copied into your project. Customize the inline expandable activity block (Claude Code / Cursor style) without fighting a library API.
+2. **Built on bits-ui.** Accessible headless primitives: keyboard navigation, focus trapping, ARIA — free.
+3. **Svelte 5 + Tailwind v4 native.** The migration is confirmed complete as of early 2026.
+4. **Only what you need.** `npx shadcn-svelte@latest add button dialog sheet scroll-area tooltip` — no unused component bloat.
+5. **Chat UI pattern coverage.** Sheet (sidebar), Dialog (settings), ScrollArea (message list), Button, Input, Tooltip — all available.
 
 **Why NOT other component libraries:**
 
 | Library | Why Not |
 |---------|---------|
-| Skeleton UI | Full framework with its own design system. Too opinionated for a custom chat UI. Heavier. |
-| DaisyUI | Tailwind plugin with predefined themes. Less control over individual component behavior. No headless layer. |
-| Melt UI | Lower-level than bits-ui, more boilerplate. bits-ui (which shadcn-svelte uses) is built on Melt UI anyway. |
-| Flowbite Svelte | Pre-styled components. Less customizable. Older Svelte 4 patterns. |
+| Skeleton UI | Full framework with its own design system, Figma kit, and class token naming. Too opinionated for a custom chat UX. Confirmed to conflict with shadcn-svelte at the Tailwind theme layer. |
+| DaisyUI | Tailwind plugin with predefined themes. Less control over individual component behavior. No headless layer — accessibility is your problem. |
+| Flowbite Svelte | Wraps Flowbite JS DOM manipulation which conflicts with Svelte's reactive model. Older Svelte 4 patterns. |
+| Melt UI | Lower-level than bits-ui. More boilerplate. bits-ui (which shadcn-svelte uses) is already built on Melt UI. |
 
-### Markdown Rendering: marked + streaming-markdown + highlight.js
+### Markdown Rendering
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| marked | ^17.0 | Markdown-to-HTML | Fast, lightweight (38kB), extensible. Used widely in AI chat UIs. |
-| streaming-markdown | latest | Incremental streaming render | 3kB gzipped. Appends new chunks instead of re-parsing entire document. Purpose-built for ChatGPT-style streaming. |
-| highlight.js | ^11.9 | Syntax highlighting | AnythingLLM uses it. Lighter than Shiki for client-side use. Good language coverage. |
-| DOMPurify | ^3.x | HTML sanitization | Sanitize rendered markdown before DOM insertion. Security requirement for LLM output. |
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| marked | 17.0.4 | Markdown → HTML at runtime | Parse complete LLM response text. Fast, lightweight, synchronous. v17.0.4 released March 4, 2026. |
+| marked-shiki | latest | Shiki extension for marked | Wire Shiki into marked's code block renderer. Replaces the need for a separate highlight.js pass. |
+| shiki | 4.0.2 | Code syntax highlighting | VSCode-quality highlighting with no CSS dependency (inline styles per token). v4 is ESM-only, fully tree-shakeable, fine-grained bundle imports. Supports Svelte language out of the box. v4.0.2 confirmed current. |
+| DOMPurify | 3.x | HTML sanitization | Sanitize marked's HTML output before DOM insertion. Security requirement for any LLM output rendered as HTML. |
 
-**Rendering strategy -- two modes:**
+**Rendering strategy — two phases:**
 
-1. **During streaming:** Use `streaming-markdown` for incremental DOM updates. Each SSE chunk is appended, not re-parsed. This avoids the O(n^2) re-render problem that plagues naive `marked()` + `innerHTML` approaches.
+1. **During streaming:** Append raw text tokens to a `$state` string. Render with `{@html markedSync(rawText)}` on a debounced 100ms tick. For short responses (< 1 KB per tick) this is fast enough. For longer responses, switch to incremental DOM patching via `streaming-markdown` (see alternatives).
 
-2. **After streaming complete:** Final pass with `marked` + `highlight.js` for full-quality rendering with syntax highlighting, proper list nesting, etc. This is a single O(n) parse of the complete response.
+2. **After stream complete:** Final full-quality render: `marked(completeText)` with `marked-shiki` for syntax-highlighted code blocks.
 
-**Why NOT other markdown approaches:**
+**Why this combination over alternatives:**
 
-| Library | Why Not |
-|---------|---------|
-| markdown-it | Slightly slower than marked, heavier (70kB+). Plugin system is powerful but unnecessary here. |
-| svelte-markdown | Renders to Svelte components, which is elegant but slow for streaming -- each chunk triggers component re-creation. |
-| mdsvex | Build-time markdown preprocessing. Wrong tool for runtime AI response rendering. |
-| Shiki | Superior highlighting quality but 7x slower than highlight.js and requires WASM. Overkill for a local chat tool. |
-| @nlux/markdown | Interesting but small community, less battle-tested. |
+- **mdsvex:** Build-time preprocessor for authoring `.md` files as Svelte components. Cannot parse dynamic runtime strings. Wrong tool for LLM output.
+- **markdown-it:** More extensible but 70 KB+ vs marked's 38 KB. Plugin system is powerful but unnecessary for a chat UI.
+- **svelte-markdown:** Renders to Svelte components — elegant but slow for streaming because each chunk triggers component re-creation.
+- **highlight.js:** The legacy choice. Shiki is strictly better: inline styles (no CSS file), VSCode theme quality, ESM tree-shaking, Svelte syntax support. highlight.js requires loading all language grammars or manual cherry-picking.
 
-### SSE Consumption: Native fetch + ReadableStream
+**Note on streaming-markdown:** The `streaming-markdown` package (3 KB gzipped) by thetarnav provides incremental DOM updates optimized for ChatGPT-style streaming — appends new chunks without re-parsing the entire document. If naive re-parse causes visible flicker at high token rates, add this package. Start without it and add if needed.
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Native fetch API | (built-in) | HTTP POST + stream reading | No library needed. Works in all modern browsers. |
+### SSE Consumption
 
-**Pattern for consuming Chimera's POST /chat/stream:**
+No library required. Use the browser's native `fetch` API with `ReadableStream`.
+
+**Why NOT native `EventSource`:** `EventSource` only supports GET requests. The existing backend endpoint is `POST /chat/stream`. This is a hard constraint.
+
+**Why NOT `@microsoft/fetch-event-source`:** 12 KB for what is ~30 lines of code. AnythingLLM uses it but it is unnecessary overhead.
+
+**Why NOT `sveltekit-sse`:** Designed for SvelteKit server-side SSE endpoints. Chimera's SSE is produced by the existing `chimera-chat.js`, not by a SvelteKit route handler.
+
+**Recommended pattern:**
 
 ```javascript
-// Chimera uses POST for SSE (non-standard but common for AI APIs)
-// Native EventSource only supports GET, so we use fetch + ReadableStream
-
+// src/lib/api/client.js
 async function streamChat(message, sessionId, onEvent) {
   const response = await fetch('/chat/stream', {
     method: 'POST',
@@ -131,13 +140,13 @@ async function streamChat(message, sessionId, onEvent) {
 
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
-    buffer = lines.pop(); // keep incomplete line
+    buffer = lines.pop(); // retain incomplete line for next chunk
 
     let eventType = '';
     for (const line of lines) {
-      if (line.startsWith('event: ')) eventType = line.slice(7);
+      if (line.startsWith('event: ')) eventType = line.slice(7).trim();
       else if (line.startsWith('data: ') && eventType) {
-        onEvent(eventType, JSON.parse(line.slice(6)));
+        try { onEvent(eventType, JSON.parse(line.slice(6))); } catch {}
         eventType = '';
       }
     }
@@ -145,55 +154,85 @@ async function streamChat(message, sessionId, onEvent) {
 }
 ```
 
-**Why NOT library-based SSE:**
+**SSE event types the frontend must handle** (from existing chimera-chat.js):
 
-| Library | Why Not |
-|---------|---------|
-| `EventSource` (native) | Only supports GET requests. Chimera uses POST /chat/stream. |
-| `@microsoft/fetch-event-source` | 12kB for what is 30 lines of code. AnythingLLM uses it but it is unnecessary complexity. |
-| `sveltekit-sse` | Designed for SvelteKit server-side SSE endpoints. Chimera's SSE comes from chimera-chat.js, not SvelteKit. |
+| Event | Data Shape | UI Behavior |
+|-------|------------|-------------|
+| `tool` | `{ tool, hadError }` | Inline expandable activity block |
+| `synapse_question` | `{ text }` | Planning question in activity block |
+| `synapse_answer` | `{ answer }` | Planning answer in activity block |
+| `task_start` | `{ description }` | Add task to activity list |
+| `task_done` | `{ id }` | Mark task complete in list |
+| `tasks_complete` | `{ count }` | Collapse activity section |
+| `auto_save` | `{ content }` | Show save indicator |
+| `intent` | `{ mode }` | Show intent badge (chat/synapse/task) |
+| `done` | `{ response, session_id, stats }` | Render final response, enable input |
+| `error` | `{ error }` | Show error state, re-enable input |
 
-### Icons: Lucide Svelte
+### Icon Library
 
 | Library | Version | Purpose | Why |
 |---------|---------|---------|-----|
-| @lucide/svelte | latest | Icon set | Tree-shakeable, only imports icons you use. shadcn-svelte uses it natively. Consistent with the component library. |
+| lucide-svelte | 0.577.0 | UI icons | Tree-shakeable (import only used icons). 1000+ icons. Svelte 5 compatible. shadcn-svelte uses lucide-svelte natively — consistent. Confirmed current: 0.577.0 (March 6, 2026). |
+
+**Why lucide-svelte over heroicons:** heroicons has ~316 icons; lucide has 1000+. A chat UI needs send, stop, copy, expand/collapse, settings, sidebar toggle, upload, search, check, trash, download — lucide covers all of these. heroicons is maintained primarily for Tailwind UI subscribers; lucide has broader independent community adoption.
+
+### Class Utilities
+
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| tailwind-merge | latest | Merge conditional Tailwind classes without conflicts | Required for component variants: `twMerge('px-4', large && 'px-8')`. Installed by shadcn-svelte. |
+| clsx | latest | Conditional class composition | Companion to tailwind-merge. Standard shadcn-svelte pattern: `cn(clsx(...), twMerge(...))`. Installed by shadcn-svelte. |
+
+---
 
 ## Integration with Existing Stack
 
-### Static File Serving
-
-The existing `chimera-chat.js` uses raw `node:http`. To serve the built frontend, add static file serving:
+### Serving Static Build from chimera-chat.js
 
 ```javascript
-// Add to chimera-chat.js request handler
-const path = require('node:path');
-const fs = require('node:fs');
+// Add to existing chimera-chat.js request handler (node:http, no Express)
+import { readFileSync, existsSync } from 'node:fs';
+import { join, extname, resolve } from 'node:path';
 
-const STATIC_DIR = path.join(__dirname, 'web', 'build');
+const STATIC_DIR = resolve(process.cwd(), 'chimera-web', 'build');
+
 const MIME_TYPES = {
-  '.html': 'text/html',
-  '.js': 'application/javascript',
-  '.css': 'text/css',
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript',
+  '.css':  'text/css',
+  '.svg':  'image/svg+xml',
+  '.ico':  'image/x-icon',
+  '.png':  'image/png',
+  '.woff2': 'font/woff2',
   '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
 };
 
 function serveStatic(req, res) {
-  let filePath = path.join(STATIC_DIR, req.url === '/' ? 'index.html' : req.url);
-  if (!filePath.startsWith(STATIC_DIR)) { sendJson(res, 403, { error: 'Forbidden' }); return false; }
-  if (!fs.existsSync(filePath)) {
-    // SPA fallback: serve index.html for client-side routing
-    filePath = path.join(STATIC_DIR, 'index.html');
+  const urlPath = req.url.split('?')[0];  // strip query string
+  let filePath = join(STATIC_DIR, urlPath === '/' ? 'index.html' : urlPath);
+
+  // Path traversal guard
+  if (!filePath.startsWith(STATIC_DIR)) {
+    res.writeHead(403); res.end(); return true;
   }
-  const ext = path.extname(filePath);
-  const mime = MIME_TYPES[ext] || 'application/octet-stream';
-  const content = fs.readFileSync(filePath);
-  res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'public, max-age=3600' });
-  res.end(content);
+
+  // SPA fallback: serve index.html for unknown routes (enables client-side routing)
+  if (!existsSync(filePath)) {
+    filePath = join(STATIC_DIR, 'index.html');
+  }
+
+  const ext = extname(filePath);
+  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Cache-Control': 'public, max-age=3600',
+  });
+  res.end(readFileSync(filePath));
   return true;
 }
+
+// In the request handler: check API routes first, then fall through to serveStatic
 ```
 
 ### SvelteKit adapter-static Configuration
@@ -207,154 +246,166 @@ export default {
     adapter: adapter({
       pages: 'build',
       assets: 'build',
-      fallback: 'index.html',  // SPA mode -- all routes serve index.html
+      fallback: 'index.html',  // SPA mode — client-side routing works
     }),
-    paths: {
-      base: '',  // served from root
-    },
   },
 };
 ```
 
-The `fallback: 'index.html'` is critical -- it enables SPA mode so client-side routing works. Without it, refreshing on `/settings` would 404.
+The `fallback: 'index.html'` is critical. Without it, navigating directly to `/settings` returns 404 from the Node.js static handler.
 
 ### API Proxy During Development
 
-During `npm run dev`, SvelteKit runs on port 5173 but the API is on port 3210. Use Vite's proxy:
+SvelteKit dev server runs on port 5173; the API is on port 3210. Vite's built-in proxy eliminates CORS:
 
-```javascript
-// vite.config.js
-export default {
+```typescript
+// vite.config.ts
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [tailwindcss(), sveltekit()],
   server: {
     proxy: {
-      '/chat': 'http://127.0.0.1:3210',
-      '/health': 'http://127.0.0.1:3210',
+      '/chat':     'http://127.0.0.1:3210',
+      '/health':   'http://127.0.0.1:3210',
       '/sessions': 'http://127.0.0.1:3210',
     },
   },
-};
+});
 ```
 
-### SSE Event Types to Handle
+In production, SvelteKit's static output is served by the same Node.js process on the same port — no proxy needed.
 
-From chimera-chat.js, the frontend must handle these SSE event types:
-
-| Event | Data | UI Behavior |
-|-------|------|-------------|
-| `tool` | `{ tool, hadError }` | Show in expandable activity block |
-| `synapse_question` | `{ text }` | Show planning question |
-| `synapse_answer` | `{ answer }` | Show planning answer |
-| `task_start` | `{ description }` | Add to activity list |
-| `task_done` | `{ id }` | Mark task complete |
-| `tasks_complete` | `{ count }` | Collapse activity section |
-| `auto_save` | `{ content }` | Show save indicator |
-| `intent` | `{ mode }` | Show intent badge |
-| `done` | `{ response, session_id, stats }` | Render final response, enable input |
-| `error` | `{ error }` | Show error state |
-
-## What NOT to Add
-
-| Technology | Why Not |
-|------------|---------|
-| Express.js | chimera-chat.js uses raw `node:http`. Adding Express for static file serving is dependency bloat for what is 20 lines of code. |
-| Socket.IO | Chimera already has SSE working. WebSockets add bidirectional complexity that is unnecessary -- the client sends messages via POST, server streams via SSE. |
-| State management library | Svelte 5 runes (`$state`, `$derived`, `$effect`) replace all state management needs. No Zustand, no Redux, no stores library. |
-| React | See framework comparison above. Wrong choice for this project. |
-| TypeScript (optional) | Svelte 5 has excellent type inference with JSDoc. TypeScript adds build complexity. Use it if the team prefers it, but it is not required. Start with JS, migrate later if needed. |
-| moment.js | AnythingLLM uses it. It is 300kB and deprecated in favor of native `Intl.DateTimeFormat` and `Date`. |
-| lodash | AnythingLLM uses lodash.debounce. A 5-line debounce function or Svelte's `$effect` with a timer replaces it. |
-| i18next | Chimera is a personal local tool. Internationalization is premature optimization. |
-| onnxruntime-web | AnythingLLM bundles this for client-side ML. Chimera does all ML server-side via LM Studio. |
-
-## Alternatives Considered
-
-### Framework Comparison
-
-| Criterion | SvelteKit (Recommended) | React + Vite | Solid + Vite |
-|-----------|------------------------|--------------|--------------|
-| Bundle size | Smallest (compiled away) | ~45kB runtime | ~7kB runtime |
-| Streaming DX | $state auto-updates DOM | useState + useEffect dance | Signals (good, but smaller ecosystem) |
-| Static build | adapter-static (official) | vite build (manual SPA setup) | vite build (manual SPA setup) |
-| Component libraries | shadcn-svelte, bits-ui | shadcn/ui (largest ecosystem) | Limited options |
-| AI chat precedent | Open WebUI (40k stars) | AnythingLLM (35k stars) | None major |
-| Learning curve | Low (HTML + superpowers) | Medium (JSX, hooks, effects) | Medium (similar to React but different) |
-| Community size | Smaller but growing fast | Largest | Smallest |
-
-**Verdict:** SvelteKit wins on bundle size, streaming DX, and static output. React has a larger ecosystem but brings unnecessary weight. Solid is technically excellent but has too small an ecosystem for component libraries.
-
-### Markdown Library Comparison
-
-| Criterion | marked (Recommended) | markdown-it | remark/rehype |
-|-----------|---------------------|-------------|---------------|
-| Size | 38kB | 70kB+ | 100kB+ (with plugins) |
-| Speed | Fastest | Fast | Slower (AST-based) |
-| Extensibility | Good (extensions API) | Best (plugin system) | Best (unified ecosystem) |
-| Streaming | Needs streaming-markdown helper | Same issue | Same issue |
-| AI chat usage | Common | AnythingLLM uses it | Less common for chat |
-
-**Verdict:** marked is fastest and smallest. For a chat UI that will use streaming-markdown during streaming anyway, the full-document parser only runs once at stream completion. Speed and size win.
+---
 
 ## Installation
 
 ```bash
-# Create SvelteKit project
+# 1. Scaffold SvelteKit project
 npx sv create chimera-web
-# Select: SvelteKit minimal, Svelte 5, No TypeScript (or TypeScript if preferred)
+# Choose: SvelteKit minimal, Svelte 5, TypeScript (recommended), ESLint + Prettier
 
 cd chimera-web
 
-# Core dependencies
-npm install marked streaming-markdown highlight.js dompurify
+# 2. Tailwind CSS v4 (Vite plugin — no postcss.config.js needed)
+npm install tailwindcss @tailwindcss/vite
 
-# UI components (copy-paste model, not all are npm installs)
+# 3. Markdown rendering
+npm install marked marked-shiki shiki dompurify
+npm install -D @types/dompurify  # if using TypeScript
+
+# 4. Icons
+npm install lucide-svelte
+
+# 5. Static adapter
+npm install -D @sveltejs/adapter-static
+
+# 6. shadcn-svelte (CLI adds components, also installs tailwind-merge, clsx, bits-ui)
 npx shadcn-svelte@latest init
 npx shadcn-svelte@latest add button input scroll-area sheet dialog tooltip
-
-# Icons (installed by shadcn-svelte init, but for reference)
-npm install @lucide/svelte
-
-# Adapter for static build
-npm install -D @sveltejs/adapter-static
 ```
 
-## Project Structure
+---
+
+## Recommended Project Structure
 
 ```
 chimera-web/
   src/
     lib/
-      components/       # shadcn-svelte components + custom
-        ui/             # shadcn-svelte generated
-        chat/           # ChatMessage, ChatInput, ActivityBlock
+      components/
+        ui/               # shadcn-svelte generated (button, dialog, etc.)
+        chat/
+          MessageBubble.svelte
+          ActivityBlock.svelte    # Inline expandable (Claude Code style)
+          ChatInput.svelte
+          StreamingText.svelte    # Handles marked + shiki render
       api/
-        client.js       # fetch wrapper, SSE consumer
-      stores/
-        chat.svelte.js  # $state for messages, session, streaming
+        client.js         # fetch wrapper + SSE stream consumer
+        types.js          # SSE event type definitions
       utils/
-        markdown.js     # marked config, streaming-markdown wrapper
+        markdown.js       # marked config with marked-shiki
+        cn.js             # clsx + tailwind-merge helper
     routes/
-      +layout.svelte    # App shell, sidebar
-      +page.svelte      # Chat view (main route)
+      +layout.svelte      # App shell (sidebar, header)
+      +page.svelte        # Main chat view
       settings/
-        +page.svelte    # Settings page
-  static/               # Static assets (favicon, etc.)
-  svelte.config.js      # adapter-static config
-  vite.config.js        # Proxy config for dev
-  build/                # Output (gitignored, served by chimera-chat.js)
+        +page.svelte      # Settings
+  static/                 # favicon, icons
+  svelte.config.js        # adapter-static config
+  vite.config.ts          # Tailwind plugin + dev proxy
+  build/                  # Output (gitignored) — served by chimera-chat.js
 ```
+
+---
+
+## Alternatives Considered
+
+| Category | Recommended | Alternative | Why Not Alternative |
+|----------|-------------|-------------|---------------------|
+| Framework | SvelteKit 2.54 | React + Vite | ~45 KB React runtime; SSE streaming requires hook choreography; no first-class static adapter |
+| Framework | SvelteKit 2.54 | Next.js | Requires Node.js runtime in production; adapter-static eliminates this entirely |
+| CSS | Tailwind v4 | UnoCSS | Smaller ecosystem; less tooling; shadcn-svelte integration smoother with Tailwind |
+| Components | shadcn-svelte | Skeleton UI | Opinionated design system conflicts at CSS custom property level with shadcn-svelte |
+| Markdown | marked 17 | markdown-it | 70 KB+ vs 38 KB; plugin flexibility not needed for simple chat rendering |
+| Markdown | marked 17 | remark/rehype | 100 KB+ with plugins; AST-based pipeline is overkill for runtime LLM output |
+| Highlighting | shiki 4 | highlight.js | highlight.js requires separate CSS file, manual language registration; Shiki has inline styles and better quality |
+| Highlighting | shiki 4 | Prism | Prism is older, requires CSS; less actively maintained than Shiki |
+| Icons | lucide-svelte | heroicons | heroicons has 316 icons; lucide has 1000+; lucide is shadcn-svelte's default |
+| SSE | fetch + ReadableStream | @microsoft/fetch-event-source | 12 KB for 30 lines of code; unjustified dependency |
+
+---
+
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| Express.js (for static serving) | chimera-chat.js uses raw `node:http`. Adding Express for static file serving is 200 KB of dependency for 20 lines of code. | `fs.readFileSync` + MIME type map (shown above) |
+| native `EventSource` | Only supports GET. `/chat/stream` is POST. Hard constraint. | `fetch` + `response.body.getReader()` |
+| `sveltekit-sse` library | Designed for SvelteKit-produced SSE endpoints, not external server SSE. | Native fetch + ReadableStream |
+| Socket.IO | Chimera already has SSE. WebSockets add bidirectional complexity for a problem that is solved. | SSE via POST |
+| State management library (Zustand, etc.) | Svelte 5 runes replace all state management needs. No external store library required. | `$state`, `$derived`, `$effect` |
+| mdsvex | Build-time preprocessor for .md file routing. Cannot parse dynamic runtime strings. | `marked` + `marked-shiki` |
+| highlight.js | Legacy. Shiki is strictly better in every dimension relevant to this project. | `shiki` with fine-grained imports |
+| CDN-loaded libraries in production | Violates local-only constraint. No `<script src="https://...">`. | Vite bundles everything at build time |
+| moment.js | 300 KB, deprecated. | Native `Intl.DateTimeFormat` and `Date` |
+| lodash | AnythingLLM dependency creep. A 5-line debounce function replaces lodash.debounce. | Svelte `$effect` with a timer |
+| TypeScript (hard requirement) | SvelteKit works well with TypeScript and it is strongly recommended, but it is not required to start. | Begin with TypeScript from day one via `npx sv create` scaffolder |
+
+---
+
+## Version Compatibility Matrix
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| svelte@5.53.x | @sveltejs/kit@2.54.x | SvelteKit 2.x ships Svelte 5 by default. Do not mix Svelte 4 + SvelteKit 2. |
+| tailwindcss@4.2.x | @tailwindcss/vite@4.2.x | Major versions must match. No postcss.config.js in v4. |
+| shadcn-svelte (CLI) | svelte@5.x + tailwindcss@4.x | Svelte 5 + Tailwind v4 migration confirmed complete (early 2026). |
+| bits-ui@latest | svelte@5.x only | bits-ui v1+ requires Svelte 5 runes. Do not use bits-ui v0.x with Svelte 5. |
+| shiki@4.0.2 | ESM only | Shiki v4 is ESM-only. SvelteKit/Vite is ESM — no issue. Do not `require()`. |
+| marked@17.0.4 | Node.js 18+ / modern browsers | v17 has breaking changes to list token handling vs v15. Start fresh, do not migrate from v15. |
+| lucide-svelte@0.577.0 | svelte@4 and svelte@5 | Both Svelte generations supported. Import named: `import { Send } from 'lucide-svelte'`. |
+| @sveltejs/adapter-static@3.x | @sveltejs/kit@2.x | Official adapter, ships in the SvelteKit repo. |
+
+---
 
 ## Sources
 
-- Open WebUI architecture: https://deepwiki.com/open-webui/open-webui/2-architecture (MEDIUM confidence)
-- AnythingLLM package.json: fetched via GitHub API (HIGH confidence - direct source)
-- Svelte 5 latest (5.53.9): https://www.npmjs.com/package/svelte (HIGH confidence)
-- SvelteKit latest (2.53.4): https://www.npmjs.com/package/@sveltejs/kit (HIGH confidence)
-- Tailwind CSS v4 (4.2.1): https://www.npmjs.com/package/tailwindcss (HIGH confidence)
-- shadcn-svelte (1.1.0): https://www.npmjs.com/package/shadcn-svelte (HIGH confidence)
-- bits-ui (2.16.3): https://www.npmjs.com/package/bits-ui (HIGH confidence)
-- adapter-static (3.0.10): https://www.npmjs.com/package/@sveltejs/adapter-static (HIGH confidence)
-- marked (17.0.4): https://www.npmjs.com/package/marked (HIGH confidence)
-- streaming-markdown: https://github.com/thetarnav/streaming-markdown (MEDIUM confidence)
-- Chrome LLM rendering best practices: https://developer.chrome.com/docs/ai/render-llm-responses (HIGH confidence)
-- SvelteKit adapter-static docs: https://svelte.dev/docs/kit/adapter-static (HIGH confidence)
-- highlight.js vs Shiki comparison: https://dev.to/begin/tale-of-the-tape-highlightjs-vs-shiki-27ce (MEDIUM confidence)
+- [SvelteKit releases (GitHub)](https://github.com/sveltejs/kit/releases) — confirmed latest stable 2.54.0 (March 11, 2026). HIGH confidence.
+- [Svelte "What's New" March 2026](https://svelte.dev/blog/whats-new-in-svelte-march-2026) — confirmed Svelte 5.53.x, SvelteKit 2.53.x feature set. HIGH confidence.
+- [Tailwind CSS SvelteKit guide (official)](https://tailwindcss.com/docs/guides/sveltekit) — confirmed v4.2 setup with @tailwindcss/vite plugin. HIGH confidence.
+- [adapter-static docs (official)](https://svelte.dev/docs/kit/adapter-static) — confirmed pages/assets/fallback options. HIGH confidence.
+- [marked releases (GitHub)](https://github.com/markedjs/marked/releases) — confirmed v17.0.4 (March 4, 2026). HIGH confidence.
+- [Shiki install guide (official)](https://shiki.style/guide/install) — confirmed v4.0.2, ESM-only, fine-grained bundles. HIGH confidence.
+- [shadcn-svelte docs (official)](https://www.shadcn-svelte.com/docs) — confirmed Svelte 5 + Tailwind v4 support. HIGH confidence.
+- [lucide-svelte (npm)](https://www.npmjs.com/package/lucide-svelte) — confirmed v0.577.0, Svelte 5 compatible (March 6, 2026). HIGH confidence.
+- WebSearch: SvelteKit vs React/Next.js comparison 2025-2026 — multiple sources agree on bundle size and local AI tool fit. MEDIUM confidence.
+- WebSearch: SSE consumption patterns (fetch vs EventSource) — confirmed POST endpoint requires fetch+ReadableStream, not EventSource. MEDIUM confidence.
+- WebSearch: shadcn-svelte vs Skeleton vs bits-ui comparison — confirmed shadcn-svelte is "copy and own" model, distinct from Skeleton. MEDIUM confidence.
+
+---
+
+*Stack research for: Chimera Web UI (local AI assistant frontend)*
+*Researched: 2026-03-12*
