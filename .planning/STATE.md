@@ -10,28 +10,29 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 2 of 4 (Core Chat Loop)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-03-12 — Phase 1 Static Shell verified and complete
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-03-12 — Completed 02-01-PLAN.md (chat data layer)
 
-Progress: [███░░░░░░░] 25%
+Progress: [████░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: ~4 min/plan
-- Total execution time: ~8 min
+- Total execution time: ~12 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-static-shell | 2 | ~8 min | ~4 min |
+| 02-core-chat-loop | 1 | ~4 min | ~4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (API prefix migration), 01-02 (SvelteKit scaffold)
-- Trend: Fast — both plans well-scoped
+- Last 5 plans: 01-01 (API prefix migration), 01-02 (SvelteKit scaffold), 02-01 (chat data layer)
+- Trend: Fast — plans well-scoped, type errors caught and fixed automatically
 
 *Updated after each plan completion*
 
@@ -49,6 +50,8 @@ Recent decisions affecting current work:
 - [01-02]: Tailwind v4 uses @tailwindcss/vite Vite plugin — no postcss.config.js, no tailwind.config file
 - [01-02]: shadcn-svelte CLI (v1.1.1) requires interactive mode — create components.json + theme manually for CI/automation contexts
 - [01-02]: Zinc oklch palette used for dark theme (bg-background maps to oklch(0.141 0.005 285.823) in dark mode)
+- [02-01]: ReadableStreamDefaultReader used instead of for-await on ReadableStream (TypeScript DOM lib limitation)
+- [02-01]: AbortError from stop() silently returns — does not produce error UI or error message
 
 ### Pending Todos
 
@@ -58,10 +61,10 @@ None.
 
 - [Phase 4]: GET /api/sessions list endpoint does not exist yet — must be added to chimera-chat.js before session sidebar can be built
 - [Phase 4]: /api/documents endpoints (upload, list, delete) are in the RAG stack, not chimera-chat.js — confirm API contract before building knowledge UI
-- [Phase 2]: Svelte 5 runes + streaming state is MEDIUM-HIGH confidence — validate reactive class pattern ($state in .svelte.ts) during implementation
+- [Phase 2]: Svelte 5 runes + streaming state is MEDIUM-HIGH confidence — RESOLVED: reactive class pattern works correctly in .svelte.ts, arrow functions prevent this-binding issues
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Phase 1 verified (5/5 must-haves) — ready for Phase 2 planning
+Last session: 2026-03-12 22:06 UTC
+Stopped at: Completed 02-01-PLAN.md — chat data layer (types, SSEClient, ChatStore, markdown)
 Resume file: None
