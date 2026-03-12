@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** User says what they want in plain language, framework handles the rest
-**Current focus:** Phase 1 — Static Shell
+**Current focus:** Phase 2 — Core Chat Loop
 
 ## Current Position
 
-Phase: 1 of 4 (Static Shell)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-03-12 — Completed 01-02-PLAN.md (SvelteKit scaffold + build verified)
+Phase: 2 of 4 (Core Chat Loop)
+Plan: 0 of 3 in current phase
+Status: Ready to plan
+Last activity: 2026-03-12 — Phase 1 Static Shell verified and complete
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -62,6 +62,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T20:49:43Z
-Stopped at: Completed 01-02-PLAN.md — Phase 1 Static Shell complete, ready for Phase 2
+Last session: 2026-03-12
+Stopped at: Phase 1 verified (5/5 must-haves) — ready for Phase 2 planning
 Resume file: None

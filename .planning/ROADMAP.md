@@ -12,7 +12,7 @@ Chimera has a fully working backend — SSE streaming, MCP tools, Synapse workfl
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Static Shell** - SvelteKit scaffolding + Node.js static serving + backend /api/ prefix migration
+- [x] **Phase 1: Static Shell** - SvelteKit scaffolding + Node.js static serving + backend /api/ prefix migration
 - [ ] **Phase 2: Core Chat Loop** - Streaming chat experience with markdown, code highlighting, stop/cancel, and error handling
 - [ ] **Phase 3: Tool + Synapse Visualization** - Inline tool call display and real-time Synapse workflow progress panel
 - [ ] **Phase 4: Sessions, Health + Knowledge** - Session sidebar, system health bar, and knowledge base management
@@ -32,8 +32,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Migrate chimera-chat.js routes to /api/* prefix and add static file serving + SPA fallback
-- [ ] 01-02-PLAN.md — Scaffold SvelteKit project with Svelte 5, Tailwind v4, shadcn-svelte, adapter-static, and Vite proxy config
+- [x] 01-01-PLAN.md — Migrate chimera-chat.js routes to /api/* prefix and add static file serving + SPA fallback
+- [x] 01-02-PLAN.md — Scaffold SvelteKit project with Svelte 5, Tailwind v4, shadcn-svelte, adapter-static, and Vite proxy config
 
 ### Phase 2: Core Chat Loop
 **Goal**: Users can send messages to Chimera and receive streaming AI responses with full markdown rendering, code highlighting, stop/cancel, loading states, error handling, dark mode, and responsive layout
@@ -93,7 +93,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Static Shell | 0/2 | Not started | - |
+| 1. Static Shell | 2/2 | Complete | 2026-03-12 |
 | 2. Core Chat Loop | 0/3 | Not started | - |
 | 3. Tool + Synapse Visualization | 0/3 | Not started | - |
 | 4. Sessions, Health + Knowledge | 0/3 | Not started | - |
