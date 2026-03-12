@@ -29,11 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The Vite dev server proxies /api/ to Node.js without CORS errors
   4. Refreshing any SvelteKit route (e.g., /settings) returns the app, not a 404
   5. The existing test suite passes after the /api/ prefix migration
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Migrate chimera-chat.js routes to /api/* prefix and add static file serving + SPA fallback
-- [ ] 01-02: Scaffold SvelteKit project with Svelte 5, Tailwind v4, shadcn-svelte, adapter-static, and Vite proxy config
+- [ ] 01-01-PLAN.md — Migrate chimera-chat.js routes to /api/* prefix and add static file serving + SPA fallback
+- [ ] 01-02-PLAN.md — Scaffold SvelteKit project with Svelte 5, Tailwind v4, shadcn-svelte, adapter-static, and Vite proxy config
 
 ### Phase 2: Core Chat Loop
 **Goal**: Users can send messages to Chimera and receive streaming AI responses with full markdown rendering, code highlighting, stop/cancel, loading states, error handling, dark mode, and responsive layout
