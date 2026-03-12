@@ -72,6 +72,19 @@
 	--ring: oklch(0.552 0.016 285.938);
 }
 
+/* Prose overrides for chat context */
+.prose {
+	max-width: none;
+}
+
+pre code.hljs {
+	border-radius: var(--radius-md);
+}
+
+pre {
+	position: relative;
+}
+
 /* highlight.js dark mode overrides — github-dark-dimmed theme */
 .dark .hljs {
 	color: #adbac7;

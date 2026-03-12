@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { chatStore } from '$lib/chat/ChatStore.svelte.js';
 	import MessageBubble from './MessageBubble.svelte';
+	import LoadingIndicator from './LoadingIndicator.svelte';
 
 	// Ref to the scrollable outer container.
 	let scrollContainer: HTMLElement | undefined = $state();
@@ -37,5 +38,6 @@
 		{#each chatStore.messages as message (message.id)}
 			<MessageBubble {message} />
 		{/each}
+		<LoadingIndicator />
 	</div>
 </div>
