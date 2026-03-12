@@ -10,16 +10,16 @@
 
 ### Core Chat Loop
 
-- [ ] **CHAT-01**: User can type a message and send it (auto-growing textarea, Enter to send, Shift+Enter for newline)
-- [ ] **CHAT-02**: User sees assistant response tokens streaming in real-time via SSE
-- [ ] **CHAT-03**: User sees markdown rendered correctly (headings, bold, italic, lists, tables, links, inline code)
-- [ ] **CHAT-04**: User sees code blocks with syntax highlighting and per-block copy button
-- [ ] **CHAT-05**: User can copy an entire assistant message with one click
-- [ ] **CHAT-06**: User can stop/cancel a generation in progress (closes SSE connection)
-- [ ] **CHAT-07**: User sees a thinking/loading indicator between sending and first token
-- [ ] **CHAT-08**: User sees inline error messages with retry button when requests fail (timeout, 429, server error)
-- [ ] **CHAT-09**: User sees the UI in dark mode by default, can toggle to light mode, preference persists in localStorage
-- [ ] **CHAT-10**: User can use the UI comfortably on desktop and tablet breakpoints (collapsible sidebar on tablet)
+- [x] **CHAT-01**: User can type a message and send it (auto-growing textarea, Enter to send, Shift+Enter for newline)
+- [x] **CHAT-02**: User sees assistant response tokens streaming in real-time via SSE
+- [x] **CHAT-03**: User sees markdown rendered correctly (headings, bold, italic, lists, tables, links, inline code)
+- [x] **CHAT-04**: User sees code blocks with syntax highlighting and per-block copy button
+- [x] **CHAT-05**: User can copy an entire assistant message with one click
+- [x] **CHAT-06**: User can stop/cancel a generation in progress (closes SSE connection)
+- [x] **CHAT-07**: User sees a thinking/loading indicator between sending and first token
+- [x] **CHAT-08**: User sees inline error messages with retry button when requests fail (timeout, 429, server error)
+- [x] **CHAT-09**: User sees the UI in dark mode by default, can toggle to light mode, preference persists in localStorage
+- [x] **CHAT-10**: User can use the UI comfortably on desktop and tablet breakpoints (collapsible sidebar on tablet)
 
 ### Tool Call Display
 
@@ -86,16 +86,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHAT-01 | Phase 2 | Pending |
-| CHAT-02 | Phase 2 | Pending |
-| CHAT-03 | Phase 2 | Pending |
-| CHAT-04 | Phase 2 | Pending |
-| CHAT-05 | Phase 2 | Pending |
-| CHAT-06 | Phase 2 | Pending |
-| CHAT-07 | Phase 2 | Pending |
-| CHAT-08 | Phase 2 | Pending |
-| CHAT-09 | Phase 2 | Pending |
-| CHAT-10 | Phase 2 | Pending |
+| CHAT-01 | Phase 2 | Complete |
+| CHAT-02 | Phase 2 | Complete |
+| CHAT-03 | Phase 2 | Complete |
+| CHAT-04 | Phase 2 | Complete |
+| CHAT-05 | Phase 2 | Complete |
+| CHAT-06 | Phase 2 | Complete |
+| CHAT-07 | Phase 2 | Complete |
+| CHAT-08 | Phase 2 | Complete |
+| CHAT-09 | Phase 2 | Complete |
+| CHAT-10 | Phase 2 | Complete |
 | TOOL-01 | Phase 3 | Pending |
 | TOOL-02 | Phase 3 | Pending |
 | TOOL-03 | Phase 3 | Pending |

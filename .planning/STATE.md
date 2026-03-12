@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** User says what they want in plain language, framework handles the rest
-**Current focus:** Phase 2 — Core Chat Loop
+**Current focus:** Phase 3 — Tool + Synapse Visualization
 
 ## Current Position
 
-Phase: 2 of 4 (Core Chat Loop)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-12 — Completed 02-02-PLAN.md (chat UI components)
+Phase: 3 of 4 (Tool + Synapse Visualization)
+Plan: 0 of 3 in current phase
+Status: Ready to plan
+Last activity: 2026-03-12 — Phase 2 Core Chat Loop verified and complete
 
 Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: ~4 min/plan
-- Total execution time: ~15 min
+- Total execution time: ~19 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-static-shell | 2 | ~8 min | ~4 min |
-| 02-core-chat-loop | 2 | ~7 min | ~3.5 min |
+| 02-core-chat-loop | 3 | ~11 min | ~3.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (API prefix migration), 01-02 (SvelteKit scaffold), 02-01 (chat data layer), 02-02 (chat UI components)
+- Last 5 plans: 01-02, 02-01, 02-02, 02-03
 - Trend: Fast — plans well-scoped, svelte-check catches issues early
 
 *Updated after each plan completion*
@@ -55,6 +55,8 @@ Recent decisions affecting current work:
 - [02-02-A]: $derived used for timestamp in MessageBubble (avoids state_referenced_locally warning)
 - [02-02-B]: Code copy buttons injected imperatively via injectCopyButtons() after innerHTML swap
 - [02-02-C]: ChatWindow auto-scroll effect tracks messages.length AND chatStore.status
+- [02-03-A]: mode-watcher v1.x uses rune-based mode.current, not Svelte store $mode
+- [02-03-B]: highlight.js dark theme via .dark scoped CSS overrides (not CSS layers)
 
 ### Pending Todos
 
@@ -64,10 +66,9 @@ None.
 
 - [Phase 4]: GET /api/sessions list endpoint does not exist yet — must be added to chimera-chat.js before session sidebar can be built
 - [Phase 4]: /api/documents endpoints (upload, list, delete) are in the RAG stack, not chimera-chat.js — confirm API contract before building knowledge UI
-- [Phase 2]: Svelte 5 runes + streaming state is MEDIUM-HIGH confidence — RESOLVED: reactive class pattern works correctly in .svelte.ts, arrow functions prevent this-binding issues
 
 ## Session Continuity
 
-Last session: 2026-03-12 22:13 UTC
-Stopped at: Completed 02-02-PLAN.md — chat UI components (MessageBubble, InputBar, ChatWindow, EmptyState, +page.svelte)
+Last session: 2026-03-12
+Stopped at: Phase 2 verified (5/5 must-haves, human-approved) — ready for Phase 3 planning
 Resume file: None

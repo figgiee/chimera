@@ -13,7 +13,7 @@ Chimera has a fully working backend — SSE streaming, MCP tools, Synapse workfl
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Static Shell** - SvelteKit scaffolding + Node.js static serving + backend /api/ prefix migration
-- [ ] **Phase 2: Core Chat Loop** - Streaming chat experience with markdown, code highlighting, stop/cancel, and error handling
+- [x] **Phase 2: Core Chat Loop** - Streaming chat experience with markdown, code highlighting, stop/cancel, and error handling
 - [ ] **Phase 3: Tool + Synapse Visualization** - Inline tool call display and real-time Synapse workflow progress panel
 - [ ] **Phase 4: Sessions, Health + Knowledge** - Session sidebar, system health bar, and knowledge base management
 
@@ -48,9 +48,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Install dependencies, create types, SSE client, ChatStore state machine, and markdown rendering utilities
-- [ ] 02-02-PLAN.md — Build MessageBubble, InputBar, ChatWindow, EmptyState components and wire into +page.svelte
-- [ ] 02-03-PLAN.md — Add dark mode toggle, loading indicator, error display with retry, highlight.js themes, responsive layout, and human verification
+- [x] 02-01-PLAN.md — Install dependencies, create types, SSE client, ChatStore state machine, and markdown rendering utilities
+- [x] 02-02-PLAN.md — Build MessageBubble, InputBar, ChatWindow, EmptyState components and wire into +page.svelte
+- [x] 02-03-PLAN.md — Add dark mode toggle, loading indicator, error display with retry, highlight.js themes, responsive layout, and human verification
 
 ### Phase 3: Tool + Synapse Visualization
 **Goal**: Users can see every tool call Chimera makes (name, status, duration, arguments, result) and watch Synapse workflows unfold in real-time as a structured progress panel with Q&A cards, task checklist, and cancel control
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Static Shell | 2/2 | Complete | 2026-03-12 |
-| 2. Core Chat Loop | 0/3 | Not started | - |
+| 2. Core Chat Loop | 3/3 | Complete | 2026-03-12 |
 | 3. Tool + Synapse Visualization | 0/3 | Not started | - |
 | 4. Sessions, Health + Knowledge | 0/3 | Not started | - |
