@@ -19,44 +19,71 @@ const agent = new http.Agent({ keepAlive: true, maxSockets: 10 });
 // fuzzy matching without wasting tokens when returned to the model.
 const TOOLS = [
   // RAG
-  { name: "search_documents", category: "rag", desc: "Semantic search through indexed documents" },
-  { name: "upload_document", category: "rag", desc: "Upload text to RAG knowledge base" },
-  { name: "list_documents", category: "rag", desc: "List all indexed documents" },
-  { name: "delete_document", category: "rag", desc: "Delete a document by ID" },
-  { name: "store_conversation", category: "rag", desc: "Save a conversation turn for future recall" },
-  { name: "recall_conversation", category: "rag", desc: "Recall past conversations by semantic search" },
-  { name: "rag_health", category: "rag", desc: "Check RAG pipeline health status" },
+  { name: "search_documents", category: "rag", desc: "Semantic search through indexed documents", args: "query, limit?, threshold?" },
+  { name: "upload_document", category: "rag", desc: "Upload text to RAG knowledge base", args: "filename, content" },
+  { name: "list_documents", category: "rag", desc: "List all indexed documents", args: "(none)" },
+  { name: "delete_document", category: "rag", desc: "Delete a document by ID", args: "document_id" },
+  { name: "store_conversation", category: "rag", desc: "Save a conversation turn for future recall", args: "conversation_id, role, content" },
+  { name: "recall_conversation", category: "rag", desc: "Recall past conversations by semantic search", args: "query, limit?" },
+  { name: "rag_health", category: "rag", desc: "Check RAG pipeline health status", args: "(none)" },
 
   // Synapse
-  { name: "synapse_new_session", category: "synapse", desc: "Start structured workflow (feature/refactor/bugfix/research/debug)" },
-  { name: "synapse_answer", category: "synapse", desc: "Answer a Synapse discussion question" },
-  { name: "synapse_get_task", category: "synapse", desc: "Get current workflow task with context" },
-  { name: "synapse_complete_task", category: "synapse", desc: "Mark workflow task done, advance to next" },
-  { name: "synapse_escalate", category: "synapse", desc: "Pause workflow due to a blocker" },
-  { name: "synapse_resume", category: "synapse", desc: "Resume workflow after context reset" },
+  { name: "synapse_new_session", category: "synapse", desc: "Start structured workflow (feature/refactor/bugfix/research/debug)", args: "project_id, mode, user_request" },
+  { name: "synapse_answer", category: "synapse", desc: "Answer a Synapse discussion question", args: "session_id, area_id, answer" },
+  { name: "synapse_get_task", category: "synapse", desc: "Get current workflow task with context", args: "session_id" },
+  { name: "synapse_complete_task", category: "synapse", desc: "Mark workflow task done, advance to next", args: "session_id, task_id, notes?" },
+  { name: "synapse_escalate", category: "synapse", desc: "Pause workflow due to a blocker", args: "session_id, reason" },
+  { name: "synapse_resume", category: "synapse", desc: "Resume workflow after context reset", args: "session_id" },
 
   // Web search
-  { name: "web_search", category: "web", desc: "Search the web via SearXNG" },
+  { name: "web_search", category: "web", desc: "Search the web via SearXNG", args: "query, limit?" },
 
   // Filesystem
-  { name: "read_file", category: "fs", desc: "Read a file from disk" },
-  { name: "write_file", category: "fs", desc: "Write content to a file" },
-  { name: "list_directory", category: "fs", desc: "List files in a directory" },
-  { name: "search_files", category: "fs", desc: "Search for files by name pattern" },
-  { name: "read_pdf", category: "fs", desc: "Read text content from a PDF file" },
+  { name: "read_file", category: "fs", desc: "Read a file from disk", args: "path" },
+  { name: "write_file", category: "fs", desc: "Write content to a file", args: "path, content" },
+  { name: "list_directory", category: "fs", desc: "List files in a directory", args: "path" },
+  { name: "search_files", category: "fs", desc: "Search for files by name pattern", args: "path, pattern" },
+  { name: "read_pdf", category: "fs", desc: "Read text content from a PDF file", args: "path" },
 ];
+
+// ─── Keyword aliases (maps common intent words to tool names) ────
+const ALIASES = {
+  weather: "web_search", forecast: "web_search", news: "web_search", current: "web_search",
+  google: "web_search", browse: "web_search", lookup: "web_search", internet: "web_search",
+  open: "read_file", cat: "read_file", view: "read_file", show: "read_file", content: "read_file",
+  save: "write_file", create: "write_file", write: "write_file",
+  ls: "list_directory", dir: "list_directory", folder: "list_directory", files: "list_directory",
+  find: "search_files", locate: "search_files", grep: "search_files",
+  pdf: "read_pdf", document: "search_documents",
+  remember: "store_conversation", memory: "store_conversation", memorize: "store_conversation",
+  recall: "recall_conversation", past: "recall_conversation", history: "recall_conversation",
+  health: "rag_health", status: "rag_health", check: "rag_health",
+  workflow: "synapse_new_session", plan: "synapse_new_session", feature: "synapse_new_session",
+  bug: "synapse_new_session", refactor: "synapse_new_session", debug: "synapse_new_session",
+  task: "synapse_get_task", complete: "synapse_complete_task", done: "synapse_complete_task",
+  resume: "synapse_resume", escalate: "synapse_escalate", blocker: "synapse_escalate",
+  upload: "upload_document", index: "upload_document",
+};
 
 // ─── Fuzzy search ────────────────────────────────────────────────
 function findTools(query) {
   const q = query.toLowerCase();
   const terms = q.split(/\s+/);
 
+  // Expand query with alias matches
+  const expandedTerms = new Set(terms);
+  for (const term of terms) {
+    if (ALIASES[term]) expandedTerms.add(ALIASES[term]);
+  }
+
   const scored = TOOLS.map(tool => {
     const haystack = `${tool.name} ${tool.desc} ${tool.category}`.toLowerCase();
     let score = 0;
-    for (const term of terms) {
+    for (const term of expandedTerms) {
       if (haystack.includes(term)) score += 1;
-      if (tool.name.toLowerCase().includes(term)) score += 2; // boost name matches
+      if (tool.name.toLowerCase().includes(term)) score += 2;
+      // Boost if an alias directly mapped to this tool
+      if (ALIASES[term] === tool.name) score += 3;
     }
     return { ...tool, score };
   });
@@ -65,7 +92,7 @@ function findTools(query) {
     .filter(t => t.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
-    .map(({ name, desc, category }) => ({ name, desc, category }));
+    .map(({ name, desc, category, args }) => ({ name, desc, category, args }));
 }
 
 // ─── HTTP helper ─────────────────────────────────────────────────
@@ -344,10 +371,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      // Return compact format to save tokens
-      const lines = matches.map(m => `• ${m.name}: ${m.desc}`);
+      // Return compact format with arg hints to save tokens
+      const lines = matches.map(m => `• ${m.name}(${m.args}): ${m.desc}`);
       return {
-        content: [{ type: "text", text: `Found ${matches.length} tools:\n${lines.join("\n")}` }],
+        content: [{ type: "text", text: `Found ${matches.length} tools:\n${lines.join("\n")}\n\nCall with: call_tool(name, arguments: {key: value})` }],
       };
     }
 
@@ -359,7 +386,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      const toolArgs = args.arguments || {};
+      // Handle both nested {"arguments": {path: "..."}} and flat {"path": "..."} formats
+      // Small models often flatten the arguments object
+      let toolArgs = args.arguments || {};
+      if (Object.keys(toolArgs).length === 0) {
+        const { name: _name, arguments: _args, ...rest } = args;
+        if (Object.keys(rest).length > 0) toolArgs = rest;
+      }
       const result = await executeTool(args.name, toolArgs);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
