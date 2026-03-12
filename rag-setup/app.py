@@ -134,13 +134,36 @@ class HealthResponse(BaseModel):
 
 @app.get("/health")
 async def health() -> HealthResponse:
-    """Health check endpoint."""
-    services = {
-        "database": "ok" if db and db.connected else "error",
-        "embeddings": "ok" if embeddings_service else "error",
-        "search": "ok" if search_service else "error",
-        "llm_studio": "checking..."
-    }
+    """Health check endpoint with detailed service status."""
+    services = {}
+
+    # Check database
+    if db and hasattr(db, 'connected') and db.connected:
+        services["database"] = "ok"
+    else:
+        services["database"] = "error"
+
+    # Check embeddings service
+    if embeddings_service:
+        try:
+            # Test embeddings service with a simple request
+            await embeddings_service.embed(["test"])
+            services["embeddings"] = "ok"
+        except Exception as e:
+            services["embeddings"] = f"error: {str(e)[:100]}"
+    else:
+        services["embeddings"] = "error"
+
+    # Check search service
+    if search_service:
+        try:
+            # Test search service connectivity
+            await search_service.test_health()
+            services["search"] = "ok"
+        except Exception as e:
+            services["search"] = f"error: {str(e)[:100]}"
+    else:
+        services["search"] = "error"
 
     # Check LM Studio connectivity
     if llm_service:
@@ -148,10 +171,18 @@ async def health() -> HealthResponse:
             await llm_service.check_health()
             services["llm_studio"] = "ok"
         except Exception as e:
-            services["llm_studio"] = f"error: {str(e)}"
+            services["llm_studio"] = f"error: {str(e)[:100]}"
+    else:
+        services["llm_studio"] = "error"
+
+    # Overall status: ok only if all critical services are healthy
+    critical_services = ["database", "embeddings"]
+    overall_status = "ok" if all(
+        services.get(svc) == "ok" for svc in critical_services
+    ) else "degraded"
 
     return HealthResponse(
-        status="ok",
+        status=overall_status,
         timestamp=datetime.now().isoformat(),
         services=services
     )
@@ -218,39 +249,94 @@ Assistant:"""
 
 @app.post("/api/search")
 async def search(request: SearchRequest):
-    """Search documents or web."""
+    """Search documents or web with validation and error handling."""
     if not search_service:
         raise HTTPException(status_code=503, detail="Search service not available")
 
+    # Validate input
+    if not request.query or len(request.query.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    if len(request.query) > 1000:
+        raise HTTPException(status_code=400, detail="Query too long (max 1000 characters)")
+
+    # Clamp limits
+    limit = max(1, min(request.limit, 50))
+    threshold = max(0.0, min(request.threshold, 1.0))
+
     try:
+        results = []
+
         if request.type == "documents":
-            results = await search_service.search_documents(
-                request.query,
-                embeddings_service,
-                db,
-                limit=request.limit,
-                threshold=request.threshold
-            )
+            if not embeddings_service or not db:
+                raise HTTPException(status_code=503, detail="Document search not available")
+
+            try:
+                results = await search_service.search_documents(
+                    request.query,
+                    embeddings_service,
+                    db,
+                    limit=limit,
+                    threshold=threshold
+                )
+            except Exception as e:
+                logger.error(f"Document search failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Document search failed: {str(e)[:100]}")
+
         elif request.type == "web":
-            results = await search_service.search_web(request.query, limit=request.limit)
+            try:
+                results = await search_service.search_web(request.query, limit=limit)
+            except Exception as e:
+                logger.error(f"Web search failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Web search failed: {str(e)[:100]}")
         else:
-            raise HTTPException(status_code=400, detail="Invalid search type")
+            raise HTTPException(status_code=400, detail="Invalid search type: must be 'documents' or 'web'")
 
-        return {"results": results, "query": request.query}
+        return {
+            "results": results or [],
+            "query": request.query,
+            "count": len(results) if results else 0
+        }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Search error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)[:100]}")
 
 
 @app.post("/api/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
-    """Upload and index a document."""
+    """Upload and index a document with size limits and validation."""
     if not all([db, embeddings_service]):
         raise HTTPException(status_code=503, detail="Services not available")
 
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+    ALLOWED_TYPES = {".pdf", ".txt", ".md", ".docx", ".doc"}
+
     try:
+        # Validate filename
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="Filename is required")
+
+        # Check file extension
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in ALLOWED_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type '{file_ext}' not supported. Allowed: {', '.join(ALLOWED_TYPES)}"
+            )
+
+        # Read with size limit
         content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large: {len(content) / 1024 / 1024:.2f}MB > 50MB limit"
+            )
+
+        if len(content) == 0:
+            raise HTTPException(status_code=400, detail="File is empty")
 
         # Save to storage
         filepath = f"/app/documents/{file.filename}"
@@ -258,41 +344,68 @@ async def upload_document(file: UploadFile = File(...)):
             f.write(content)
 
         # Extract text based on file type
-        text = await _extract_text(file.filename, content)
+        try:
+            text = await _extract_text(file.filename, content)
+        except Exception as e:
+            logger.error(f"Text extraction failed: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to extract text: {str(e)[:100]}"
+            )
+
+        if not text or len(text.strip()) == 0:
+            raise HTTPException(status_code=400, detail="No text content extracted from file")
 
         # Chunk and embed
         chunks = _chunk_text(text, chunk_size=512, overlap=50)
+        if not chunks:
+            raise HTTPException(status_code=400, detail="Failed to chunk document")
 
         # Save to database
-        doc = await db.create_document(
-            filename=file.filename,
-            source_type="upload",
-            content=text
-        )
+        try:
+            doc = await db.create_document(
+                filename=file.filename,
+                source_type="upload",
+                content=text
+            )
+        except Exception as e:
+            logger.error(f"Document creation failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save document metadata")
 
         # Batch embed and save chunks
         batch_size = 32
-        for batch_start in range(0, len(chunks), batch_size):
-            batch = chunks[batch_start:batch_start + batch_size]
-            embeddings = await embeddings_service.embed_batch(batch)
-            for i, (chunk, embedding) in enumerate(zip(batch, embeddings)):
-                await db.save_embedding(
-                    document_id=doc.id,
-                    content=chunk,
-                    embedding=embedding,
-                    chunk_index=batch_start + i
-                )
+        embedded_count = 0
+        try:
+            for batch_start in range(0, len(chunks), batch_size):
+                batch = chunks[batch_start:batch_start + batch_size]
+                embeddings = await embeddings_service.embed_batch(batch)
+                for i, (chunk, embedding) in enumerate(zip(batch, embeddings)):
+                    await db.save_embedding(
+                        document_id=doc.id,
+                        content=chunk,
+                        embedding=embedding,
+                        chunk_index=batch_start + i
+                    )
+                    embedded_count += 1
+        except Exception as e:
+            logger.error(f"Embedding failed at chunk {embedded_count}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to embed document chunks: {str(e)[:100]}"
+            )
 
         return DocumentUploadResponse(
             filename=file.filename,
             size=len(content),
             status="success",
-            message=f"Document indexed with {len(chunks)} chunks"
+            message=f"Document indexed with {embedded_count} chunks"
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Upload error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Upload error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)[:100]}")
 
 
 @app.get("/api/conversations/{conversation_id}/history")

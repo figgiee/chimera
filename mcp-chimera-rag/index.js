@@ -4,13 +4,96 @@ const {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } = require("@modelcontextprotocol/sdk/types.js");
+const https = require("node:https");
+const http = require("node:http");
 
 const RAG_URL = process.env.RAG_SERVER_URL || "http://localhost:8080";
+const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT || "30000"); // 30s timeout
+const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || "3");
+const INITIAL_BACKOFF = 500; // 500ms
+const MAX_BACKOFF = 10000; // 10s
+
+// HTTP agents with keep-alive for connection pooling
+const agentHttp = new http.Agent({ keepAlive: true, maxSockets: 10 });
+const agentHttps = new https.Agent({ keepAlive: true, maxSockets: 10 });
 
 const server = new Server(
-  { name: "chimera-rag", version: "2.0.0" },
+  { name: "chimera-rag", version: "2.1.0" },
   { capabilities: { tools: {} } }
 );
+
+// Helper: Exponential backoff delay
+function getBackoffDelay(attempt) {
+  return Math.min(INITIAL_BACKOFF * (2 ** attempt) + Math.random() * 100, MAX_BACKOFF);
+}
+
+// Helper: Fetch with timeout
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+  try {
+    const agent = url.startsWith("https") ? agentHttps : agentHttp;
+    const response = await fetch(url, { ...options, signal: controller.signal, agent });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Helper: Retry with exponential backoff
+async function fetchWithRetry(url, options = {}) {
+  let lastError;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, options);
+
+      // Retry on 5xx errors or connection errors
+      if (response.status >= 500) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      // Check if response is valid JSON for non-204 responses
+      if (response.status !== 204) {
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error(`Invalid response type: ${contentType}`);
+        }
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on client errors (4xx) except 429 (rate limit)
+      if (error.message?.includes("status: 4") && !error.message?.includes("429")) {
+        throw error;
+      }
+
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = getBackoffDelay(attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw new Error(`Failed after ${MAX_RETRIES} retries: ${lastError?.message || "Unknown error"}`);
+}
+
+// Helper: Validate RAG URL is accessible
+async function validateRAGServer() {
+  try {
+    const response = await fetchWithTimeout(`${RAG_URL}/health`);
+    if (!response.ok) {
+      throw new Error(`Health check failed: ${response.status}`);
+    }
+    return true;
+  } catch (error) {
+    console.error(`RAG server validation failed: ${error.message}`);
+    return false;
+  }
+}
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -130,13 +213,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "search_documents": {
-        const res = await fetch(`${RAG_URL}/api/search`, {
+        if (!args.query || typeof args.query !== "string" || args.query.trim().length === 0) {
+          return {
+            content: [{ type: "text", text: "Error: query must be a non-empty string" }],
+            isError: true,
+          };
+        }
+
+        const res = await fetchWithRetry(`${RAG_URL}/api/search`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query: args.query,
-            limit: args.limit || 5,
-            threshold: args.threshold || 0.3,
+            limit: Math.min(Math.max(args.limit || 5, 1), 100),
+            threshold: Math.max(Math.min(args.threshold || 0.3, 1), 0),
             type: "documents",
           }),
         });
@@ -145,11 +235,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "upload_document": {
+        if (!args.filename || typeof args.filename !== "string") {
+          return {
+            content: [{ type: "text", text: "Error: filename is required and must be a string" }],
+            isError: true,
+          };
+        }
+        if (!args.content || typeof args.content !== "string") {
+          return {
+            content: [{ type: "text", text: "Error: content is required and must be a string" }],
+            isError: true,
+          };
+        }
+
+        // Limit to 50MB
+        const MAX_FILE_SIZE = 50 * 1024 * 1024;
+        if (args.content.length > MAX_FILE_SIZE) {
+          return {
+            content: [{ type: "text", text: `Error: file size exceeds 50MB limit (${(args.content.length / 1024 / 1024).toFixed(2)}MB)` }],
+            isError: true,
+          };
+        }
+
         const formData = new FormData();
         const blob = new Blob([args.content], { type: "text/plain" });
         formData.append("file", blob, args.filename);
 
-        const res = await fetch(`${RAG_URL}/api/documents/upload`, {
+        const res = await fetchWithRetry(`${RAG_URL}/api/documents/upload`, {
           method: "POST",
           body: formData,
         });
@@ -158,13 +270,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_documents": {
-        const res = await fetch(`${RAG_URL}/api/documents`);
+        const res = await fetchWithRetry(`${RAG_URL}/api/documents`);
         const data = await res.json();
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
 
       case "delete_document": {
-        const res = await fetch(`${RAG_URL}/api/documents/${args.document_id}`, {
+        if (!args.document_id || typeof args.document_id !== "string") {
+          return {
+            content: [{ type: "text", text: "Error: document_id is required and must be a string" }],
+            isError: true,
+          };
+        }
+
+        const res = await fetchWithRetry(`${RAG_URL}/api/documents/${encodeURIComponent(args.document_id)}`, {
           method: "DELETE",
         });
         const data = await res.json();
@@ -172,7 +291,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "store_conversation": {
-        const res = await fetch(`${RAG_URL}/api/conversations/store`, {
+        if (!args.conversation_id || typeof args.conversation_id !== "string") {
+          return {
+            content: [{ type: "text", text: "Error: conversation_id is required and must be a string" }],
+            isError: true,
+          };
+        }
+        if (!args.role || !["user", "assistant"].includes(args.role)) {
+          return {
+            content: [{ type: "text", text: "Error: role must be 'user' or 'assistant'" }],
+            isError: true,
+          };
+        }
+        if (!args.content || typeof args.content !== "string") {
+          return {
+            content: [{ type: "text", text: "Error: content is required and must be a string" }],
+            isError: true,
+          };
+        }
+
+        const res = await fetchWithRetry(`${RAG_URL}/api/conversations/store`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -186,13 +324,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "recall_conversation": {
-        const res = await fetch(`${RAG_URL}/api/conversations/recall`, {
+        if (!args.query || typeof args.query !== "string" || args.query.trim().length === 0) {
+          return {
+            content: [{ type: "text", text: "Error: query must be a non-empty string" }],
+            isError: true,
+          };
+        }
+
+        const res = await fetchWithRetry(`${RAG_URL}/api/conversations/recall`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query: args.query,
             conversation_id: args.conversation_id || null,
-            limit: args.limit || 5,
+            limit: Math.min(Math.max(args.limit || 5, 1), 100),
           }),
         });
         const data = await res.json();
@@ -200,7 +345,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "rag_health": {
-        const res = await fetch(`${RAG_URL}/health`);
+        const res = await fetchWithRetry(`${RAG_URL}/health`);
         const data = await res.json();
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
@@ -220,6 +365,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
+  // Validate RAG server is accessible before starting
+  console.error(`Validating RAG server at ${RAG_URL}...`);
+  const isHealthy = await validateRAGServer();
+  if (!isHealthy) {
+    console.error("WARNING: RAG server is not responding. MCP server starting anyway, but tool calls may fail.");
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Chimera RAG MCP server running on stdio");
