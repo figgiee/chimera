@@ -1,9 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
 // Chimera Chat Server — HTTP endpoint wrapping the orchestrator
 //
-// POST /chat   { message, session_id?, project_id?, working_dir? }
-// GET  /health
-// GET  /sessions/:id/stats
+// POST /api/chat   { message, session_id?, project_id?, working_dir? }
+// GET  /api/health
+// GET  /api/sessions/:id/stats
+// GET  /api/sessions/:id/logs
+//
+// Non-API routes serve static files from web/build (SPA fallback).
 //
 // Manages multiple concurrent sessions. Each session_id gets its own
 // ChimeraSession with independent message history and Synapse state.
@@ -126,22 +129,6 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
-// ─── Rate limiting ───────────────────────────────────────────────
-const rateLimits = new Map(); // ip → { count, resetAt }
-const RATE_LIMIT = 30;        // max requests per window
-const RATE_WINDOW = 60 * 1000; // 1 minute
-
-function checkRateLimit(ip) {
-  const now = Date.now();
-  const entry = rateLimits.get(ip);
-  if (!entry || now > entry.resetAt) {
-    rateLimits.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
-    return true;
-  }
-  entry.count++;
-  return entry.count <= RATE_LIMIT;
-}
-
 // ─── Dependency health check ────────────────────────────────────
 async function checkDeps() {
   const errors = [];
@@ -166,13 +153,6 @@ const activeLocks = new Set(); // prevent concurrent requests per session
 
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
-  const ip = req.socket.remoteAddress;
-
-  // Rate limit (skip health checks)
-  if (url.pathname !== '/health' && !checkRateLimit(ip)) {
-    sendJson(res, 429, { error: 'Rate limit exceeded. Max 30 requests per minute.' });
-    return;
-  }
 
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -180,8 +160,8 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // GET /health
-  if (req.method === 'GET' && url.pathname === '/health') {
+  // GET /api/health
+  if (req.method === 'GET' && url.pathname === '/api/health') {
     const deep = url.searchParams.get('deep') === 'true';
     const result = { status: 'ok', sessions: sessions.size, uptime: Math.floor(process.uptime()) };
     if (deep) {
@@ -192,8 +172,8 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // GET /sessions/:id/stats
-  const statsMatch = url.pathname.match(/^\/sessions\/([^/]+)\/stats$/);
+  // GET /api/sessions/:id/stats
+  const statsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stats$/);
   if (req.method === 'GET' && statsMatch) {
     const entry = sessions.get(statsMatch[1]);
     if (!entry) { sendJson(res, 404, { error: 'Session not found' }); return; }
@@ -206,8 +186,8 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // GET /sessions/:id/logs
-  const logsMatch = url.pathname.match(/^\/sessions\/([^/]+)\/logs$/);
+  // GET /api/sessions/:id/logs
+  const logsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/logs$/);
   if (req.method === 'GET' && logsMatch) {
     const entry = sessions.get(logsMatch[1]);
     if (!entry) { sendJson(res, 404, { error: 'Session not found' }); return; }
@@ -216,8 +196,8 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // POST /chat/stream — SSE streaming endpoint
-  if (req.method === 'POST' && url.pathname === '/chat/stream') {
+  // POST /api/chat/stream — SSE streaming endpoint
+  if (req.method === 'POST' && url.pathname === '/api/chat/stream') {
     let body;
     try { body = await readBody(req); } catch { sendJson(res, 400, { error: 'Invalid JSON' }); return; }
 
@@ -284,8 +264,8 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // POST /chat
-  if (req.method === 'POST' && url.pathname === '/chat') {
+  // POST /api/chat
+  if (req.method === 'POST' && url.pathname === '/api/chat') {
     let body;
     try { body = await readBody(req); } catch { sendJson(res, 400, { error: 'Invalid JSON' }); return; }
 
@@ -348,7 +328,7 @@ async function handleRequest(req, res) {
   }
 
   // 404
-  sendJson(res, 404, { error: 'Not found. Endpoints: POST /chat, GET /health, GET /sessions/:id/stats' });
+  sendJson(res, 404, { error: 'Not found. Endpoints: POST /api/chat, GET /api/health, GET /api/sessions/:id/stats' });
 }
 
 // ─── Server ──────────────────────────────────────────────────────
@@ -360,11 +340,11 @@ server.listen(PORT, HOST, () => {
   console.log(`  Listening: http://${HOST}:${PORT}`);
   console.log(`  LM Studio: http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}`);
   console.log(`  RAG:       ${process.env.RAG_URL || 'http://localhost:8080'}`);
-  console.log(`\n  POST /chat         { message, session_id?, project_id?, working_dir? }`);
-  console.log(`  POST /chat/stream  Same as /chat but returns SSE events`);
-  console.log(`  GET  /health       ?deep=true to check dependencies`);
-  console.log(`  GET  /sessions/:id/stats`);
-  console.log(`  GET  /sessions/:id/logs\n`);
+  console.log(`\n  POST /api/chat         { message, session_id?, project_id?, working_dir? }`);
+  console.log(`  POST /api/chat/stream  Same as /api/chat but returns SSE events`);
+  console.log(`  GET  /api/health       ?deep=true to check dependencies`);
+  console.log(`  GET  /api/sessions/:id/stats`);
+  console.log(`  GET  /api/sessions/:id/logs\n`);
 });
 
 server.on('error', (e) => {
