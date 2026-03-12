@@ -357,6 +357,7 @@ class ChimeraSession {
     this.toolCallCount = 0;
     this.toolsUsed = new Set();
     this.onEvent = onEvent || (() => {}); // callback for logging/UI
+    this.signal = null; // AbortSignal from chat server
   }
 
   emit(type, data) { this.onEvent({ type, ...data }); }
@@ -401,12 +402,24 @@ class ChimeraSession {
     if (result.status && result.status !== 'discussing') this.activeSynapseAreaId = null;
   }
 
+  // ─── Trim message history to stay within context ────────────
+  _trimMessages(maxMessages = 40) {
+    // Keep system prompt (index 0) + last N messages
+    if (this.messages.length <= maxMessages) return;
+    const system = this.messages[0];
+    const kept = this.messages.slice(-maxMessages + 1);
+    this.messages = [system, ...kept];
+    this.emit('trim', { dropped: this.messages.length - maxMessages, kept: kept.length });
+  }
+
   // ─── Model response with tool handling + loop detection ─────
   async getModelResponse(maxLoops = 8) {
     let loops = 0;
     this.loopDetector.reset();
 
     while (loops < maxLoops) {
+      if (this.signal?.aborted) return '[cancelled]';
+      this._trimMessages();
       const r = await chat(this.messages);
       if (!r.choices?.[0]) return '[no response]';
       const m = r.choices[0].message;
@@ -496,6 +509,7 @@ class ChimeraSession {
     let count = 0;
 
     while (question && count < 10) {
+      if (this.signal?.aborted) return;
       this.activeSynapseAreaId = question.area_id;
       const qText = question.text || question.question || JSON.stringify(question);
       this.emit('synapse_question', { area_id: question.area_id, text: qText });
@@ -534,6 +548,7 @@ class ChimeraSession {
 
     let completed = 0;
     while (taskResult.task?.status === 'pending' && completed < 15) {
+      if (this.signal?.aborted) return completed;
       const task = taskResult.task;
       this.emit('task_start', { id: task.id, description: task.description });
 

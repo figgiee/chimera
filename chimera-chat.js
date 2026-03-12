@@ -192,11 +192,29 @@ async function handleRequest(req, res) {
     }
 
     activeLocks.add(sid);
+    const abort = new AbortController();
+    req.on('close', () => { if (!res.writableEnded) abort.abort(); });
+
+    // Server-side timeout: 5 minutes max per request
+    const timeout = setTimeout(() => {
+      abort.abort();
+      if (!res.writableEnded) {
+        console.log(`[${new Date().toISOString().slice(11,19)}] [${sid}] TIMEOUT after 5 min`);
+        sendJson(res, 504, { error: 'Request timed out after 5 minutes', session_id: sid });
+      }
+    }, 5 * 60 * 1000);
+
     try {
       const { session } = getOrCreateSession(sid, project_id);
+      session.signal = abort.signal; // orchestrator checks this
       const response = await session.processMessage(message, {
         workingDir: working_dir || 'C:/Users/sandv/Desktop/chimera'
       });
+
+      if (abort.signal.aborted) {
+        console.log(`[${new Date().toISOString().slice(11,19)}] [${sid}] CANCELLED by client disconnect`);
+        return;
+      }
 
       sendJson(res, 200, {
         response,
@@ -204,9 +222,14 @@ async function handleRequest(req, res) {
         stats: session.getStats(),
       });
     } catch (e) {
+      if (abort.signal.aborted) {
+        console.log(`[${new Date().toISOString().slice(11,19)}] [${sid}] CANCELLED by client disconnect`);
+        return;
+      }
       console.error(`[ERROR] ${sid}:`, e.message);
       sendJson(res, 500, { error: e.message });
     } finally {
+      clearTimeout(timeout);
       activeLocks.delete(sid);
     }
     return;
