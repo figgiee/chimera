@@ -17,6 +17,7 @@ from db import Database, Document, Conversation
 from embeddings import EmbeddingsService
 from search import SearchService
 from llm import LMStudioService
+from synapse import SynapseEngine
 
 # Logging
 logging.basicConfig(
@@ -30,12 +31,13 @@ db: Optional[Database] = None
 embeddings_service: Optional[EmbeddingsService] = None
 search_service: Optional[SearchService] = None
 llm_service: Optional[LMStudioService] = None
+synapse_engine: Optional[SynapseEngine] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize and cleanup resources."""
-    global db, embeddings_service, search_service, llm_service
+    global db, embeddings_service, search_service, llm_service, synapse_engine
 
     logger.info("Starting Nexus RAG Server...")
 
@@ -68,6 +70,10 @@ async def lifespan(app: FastAPI):
             lm_studio_url=os.getenv("LM_STUDIO_URL", "http://localhost:1234")
         )
         logger.info("LM Studio service initialized")
+
+        # Initialize Synapse engine
+        synapse_engine = SynapseEngine(db, embeddings_service)
+        logger.info("Synapse engine initialized")
 
         logger.info("✓ All services started successfully")
 
@@ -535,6 +541,140 @@ async def recall_conversation(request: ConversationRecallRequest):
     except Exception as e:
         logger.error(f"Recall conversation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Synapse endpoints ---
+
+class SynapseNewSessionRequest(BaseModel):
+    project_id: str
+    mode: str
+    user_request: str
+
+
+class SynapseAnswerRequest(BaseModel):
+    session_id: str
+    area_id: str
+    answer: str
+
+
+class SynapseCompleteTaskRequest(BaseModel):
+    session_id: str
+    task_id: str
+    notes: str = ""
+
+
+class SynapseEscalateRequest(BaseModel):
+    session_id: str
+    reason: str
+
+
+@app.post("/api/synapse/session")
+async def synapse_new_session(request: SynapseNewSessionRequest):
+    """Create a new Synapse workflow session."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+
+    result = await synapse_engine.new_session(
+        request.project_id, request.mode, request.user_request
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.post("/api/synapse/discuss")
+async def synapse_discuss(request: SynapseAnswerRequest):
+    """Answer a discussion question. Returns next question or transitions to planning."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+
+    result = await synapse_engine.answer(
+        request.session_id, request.area_id, request.answer
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.get("/api/synapse/task/{session_id}")
+async def synapse_get_task(session_id: str):
+    """Get current task with token-budgeted context."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+
+    result = await synapse_engine.get_task(session_id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.post("/api/synapse/complete")
+async def synapse_complete_task(request: SynapseCompleteTaskRequest):
+    """Mark current task as completed and advance."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+
+    result = await synapse_engine.complete_task(
+        request.session_id, request.task_id, request.notes
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.post("/api/synapse/escalate")
+async def synapse_escalate(request: SynapseEscalateRequest):
+    """Escalate/pause a session with a reason."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+
+    result = await synapse_engine.escalate(request.session_id, request.reason)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.get("/api/synapse/resume/{session_id}")
+async def synapse_resume(session_id: str):
+    """Resume a session — returns compact context for restoration."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+
+    result = await synapse_engine.resume(session_id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.get("/api/synapse/modes")
+async def synapse_list_modes():
+    """List available Synapse workflow modes."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+    return {"modes": synapse_engine.list_modes()}
+
+
+@app.get("/api/synapse/sessions")
+async def synapse_list_sessions(project_id: str = None, status: str = None):
+    """List workflow sessions, optionally filtered."""
+    if not synapse_engine:
+        raise HTTPException(status_code=503, detail="Synapse engine not available")
+
+    sessions = await synapse_engine.db.list_workflow_sessions(project_id, status)
+    return {
+        "sessions": [
+            {
+                "id": s.id,
+                "project_id": s.project_id,
+                "mode": s.mode,
+                "status": s.status,
+                "request": s.user_request[:100],
+                "created_at": s.created_at.isoformat(),
+                "updated_at": s.updated_at.isoformat(),
+            }
+            for s in sessions
+        ]
+    }
 
 
 # Helper functions

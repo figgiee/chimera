@@ -69,6 +69,25 @@ class ConversationEmbeddingModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class WorkflowSessionModel(Base):
+    __tablename__ = "workflow_sessions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, nullable=False)
+    mode = Column(String, nullable=False)            # feature, refactor, bugfix, research, debug
+    status = Column(String, default="discussing")     # discussing, planning, executing, paused, completed, escalated
+    user_request = Column(String, nullable=False)
+    decisions = Column(String, default="{}")          # JSON: locked discussion decisions
+    plan = Column(String, default="[]")               # JSON: array of waves with tasks
+    current_wave = Column(Integer, default=0)
+    current_task = Column(Integer, default=0)
+    completed_tasks = Column(String, default="[]")    # JSON: array of completed task ids
+    escalation_reason = Column(String, nullable=True)
+    context_snapshot = Column(String, default="{}")   # JSON: compact state for resume
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # Python models
 class Document:
     def __init__(self, id: str, filename: str, source_type: str, content: str, created_at: datetime):
@@ -93,6 +112,28 @@ class Message:
         self.role = role
         self.content = content
         self.created_at = created_at
+
+
+class WorkflowSession:
+    def __init__(self, id: str, project_id: str, mode: str, status: str,
+                 user_request: str, decisions: str, plan: str,
+                 current_wave: int, current_task: int, completed_tasks: str,
+                 escalation_reason: str, context_snapshot: str,
+                 created_at: datetime, updated_at: datetime):
+        self.id = id
+        self.project_id = project_id
+        self.mode = mode
+        self.status = status
+        self.user_request = user_request
+        self.decisions = decisions
+        self.plan = plan
+        self.current_wave = current_wave
+        self.current_task = current_task
+        self.completed_tasks = completed_tasks
+        self.escalation_reason = escalation_reason
+        self.context_snapshot = context_snapshot
+        self.created_at = created_at
+        self.updated_at = updated_at
 
 
 class Database:
@@ -334,6 +375,72 @@ class Database:
             )
             session.add(emb)
             await session.commit()
+
+    # --- Synapse workflow methods ---
+
+    async def create_workflow_session(
+        self, project_id: str, mode: str, user_request: str
+    ) -> WorkflowSession:
+        """Create a new Synapse workflow session."""
+        async with self.session_factory() as session:
+            ws = WorkflowSessionModel(
+                project_id=project_id,
+                mode=mode,
+                user_request=user_request,
+                status="discussing"
+            )
+            session.add(ws)
+            await session.commit()
+            return self._ws_to_model(ws)
+
+    async def get_workflow_session(self, session_id: str) -> Optional[WorkflowSession]:
+        """Get a workflow session by ID."""
+        async with self.session_factory() as session:
+            from sqlalchemy import select
+            stmt = select(WorkflowSessionModel).where(WorkflowSessionModel.id == session_id)
+            result = await session.execute(stmt)
+            ws = result.scalars().first()
+            return self._ws_to_model(ws) if ws else None
+
+    async def update_workflow_session(self, session_id: str, **kwargs) -> Optional[WorkflowSession]:
+        """Update workflow session fields atomically."""
+        async with self.session_factory() as session:
+            from sqlalchemy import select, update
+            stmt = (
+                update(WorkflowSessionModel)
+                .where(WorkflowSessionModel.id == session_id)
+                .values(**kwargs, updated_at=datetime.utcnow())
+            )
+            await session.execute(stmt)
+            await session.commit()
+            return await self.get_workflow_session(session_id)
+
+    async def list_workflow_sessions(
+        self, project_id: str = None, status: str = None
+    ) -> List[WorkflowSession]:
+        """List workflow sessions, optionally filtered."""
+        async with self.session_factory() as session:
+            from sqlalchemy import select
+            stmt = select(WorkflowSessionModel).order_by(WorkflowSessionModel.updated_at.desc())
+            if project_id:
+                stmt = stmt.where(WorkflowSessionModel.project_id == project_id)
+            if status:
+                stmt = stmt.where(WorkflowSessionModel.status == status)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            return [self._ws_to_model(ws) for ws in rows]
+
+    def _ws_to_model(self, ws: WorkflowSessionModel) -> WorkflowSession:
+        return WorkflowSession(
+            id=ws.id, project_id=ws.project_id, mode=ws.mode,
+            status=ws.status, user_request=ws.user_request,
+            decisions=ws.decisions, plan=ws.plan,
+            current_wave=ws.current_wave, current_task=ws.current_task,
+            completed_tasks=ws.completed_tasks,
+            escalation_reason=ws.escalation_reason,
+            context_snapshot=ws.context_snapshot,
+            created_at=ws.created_at, updated_at=ws.updated_at
+        )
 
     async def search_conversation_embeddings(
         self, query_embedding: list, conversation_id: str = None, limit: int = 5
