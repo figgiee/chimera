@@ -13,10 +13,30 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const http = require('node:http');
+const path = require('node:path');
+const fs = require('node:fs');
 const { ChimeraSession } = require('./chimera-orchestrator');
 
 const PORT = parseInt(process.env.CHIMERA_PORT || '3210');
 const HOST = process.env.CHIMERA_HOST || '127.0.0.1';
+
+// ─── Static file serving ─────────────────────────────────────────
+const STATIC_DIR = path.resolve(__dirname, 'web/build');
+
+const MIME_TYPES = {
+  '.html':  'text/html; charset=utf-8',
+  '.js':    'application/javascript',
+  '.mjs':   'application/javascript',
+  '.css':   'text/css',
+  '.png':   'image/png',
+  '.jpg':   'image/jpeg',
+  '.svg':   'image/svg+xml',
+  '.ico':   'image/x-icon',
+  '.json':  'application/json',
+  '.woff2': 'font/woff2',
+  '.woff':  'font/woff',
+  '.txt':   'text/plain',
+};
 
 // ─── Session store ───────────────────────────────────────────────
 const sessions = new Map();  // session_id → { session, created, lastActive, logs }
@@ -146,6 +166,32 @@ async function checkDeps() {
 // ─── SSE helpers ─────────────────────────────────────────────────
 function sendSSE(res, event, data) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function serveStatic(req, res, pathname) {
+  const urlPath = pathname === '/' ? '/index.html' : pathname;
+  const filePath = path.resolve(STATIC_DIR, `.${urlPath}`);
+
+  // Guard against path traversal
+  if (!filePath.startsWith(STATIC_DIR)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('Forbidden');
+    return;
+  }
+
+  fs.stat(filePath, (err, stat) => {
+    if (!err && stat.isFile()) {
+      const ext = path.extname(filePath);
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': contentType });
+      fs.createReadStream(filePath).pipe(res);
+    } else {
+      // SPA fallback — serve 200.html
+      const fallback = path.resolve(STATIC_DIR, '200.html');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      fs.createReadStream(fallback).pipe(res);
+    }
+  });
 }
 
 // ─── Request handler ─────────────────────────────────────────────
@@ -327,8 +373,8 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // 404
-  sendJson(res, 404, { error: 'Not found. Endpoints: POST /api/chat, GET /api/health, GET /api/sessions/:id/stats' });
+  // Non-API routes: static files or SPA fallback
+  serveStatic(req, res, url.pathname);
 }
 
 // ─── Server ──────────────────────────────────────────────────────
