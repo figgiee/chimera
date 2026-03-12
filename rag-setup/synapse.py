@@ -317,35 +317,77 @@ class Planner:
         """Generate a wave-based plan from mode + decisions.
 
         Returns list of waves, each containing tasks.
-        Tasks are high-level directives derived from verification criteria + decisions.
+        Tasks are actionable steps derived from the user request + decisions,
+        with verification criteria as the final validation wave.
         """
         mode = MODES.get(mode_id)
         if not mode:
             return []
 
-        criteria = mode.get("verification_criteria", [])
         tasks = []
 
-        # Build tasks from verification criteria
+        # --- Wave 1+: Actionable tasks derived from decisions ---
+        if mode_id == "feature":
+            scope = decisions.get("scope", {}).get("answer", user_request)[:200]
+            interface = decisions.get("interface", {}).get("answer", "")[:200]
+            tasks.append({"id": "task-1", "description": f"Implement core logic: {scope}", "status": "pending", "notes": ""})
+            if interface:
+                tasks.append({"id": "task-2", "description": f"Wire up interface: {interface}", "status": "pending", "notes": ""})
+            tasks.append({"id": "task-3", "description": "Write tests for the new feature", "status": "pending", "notes": ""})
+            if decisions.get("dependencies") and not decisions["dependencies"].get("delegated"):
+                tasks.append({"id": "task-deps", "description": f"Install dependencies: {decisions['dependencies']['answer'][:150]}", "status": "pending", "notes": ""})
+
+        elif mode_id == "bugfix":
+            repro = decisions.get("reproduction", {}).get("answer", "")[:200]
+            scope = decisions.get("scope", {}).get("answer", "")[:200]
+            root = decisions.get("root-cause", {}).get("answer", "")[:200]
+            tasks.append({"id": "task-1", "description": f"Reproduce the bug: {repro or user_request[:150]}", "status": "pending", "notes": ""})
+            if root:
+                tasks.append({"id": "task-2", "description": f"Fix root cause: {root}", "status": "pending", "notes": ""})
+            else:
+                tasks.append({"id": "task-2", "description": f"Identify and fix root cause ({scope or user_request[:100]})", "status": "pending", "notes": ""})
+            tasks.append({"id": "task-3", "description": "Add regression test to prevent recurrence", "status": "pending", "notes": ""})
+
+        elif mode_id == "refactor":
+            scope = decisions.get("scope", {}).get("answer", user_request)[:200]
+            api_pres = decisions.get("api-preservation", {}).get("answer", "")[:150]
+            tasks.append({"id": "task-1", "description": f"Restructure: {scope}", "status": "pending", "notes": ""})
+            if api_pres:
+                tasks.append({"id": "task-2", "description": f"Verify API unchanged: {api_pres}", "status": "pending", "notes": ""})
+            tasks.append({"id": "task-3", "description": "Run existing tests to confirm no behavior change", "status": "pending", "notes": ""})
+
+        elif mode_id == "research":
+            question = decisions.get("question", {}).get("answer", user_request)[:200]
+            deliverable = decisions.get("deliverable", {}).get("answer", "summary document")[:150]
+            constraints = decisions.get("constraints", {}).get("answer", "")[:150]
+            tasks.append({"id": "task-1", "description": f"Research: {question}", "status": "pending", "notes": ""})
+            if constraints:
+                tasks.append({"id": "task-2", "description": f"Evaluate against constraints: {constraints}", "status": "pending", "notes": ""})
+            tasks.append({"id": "task-3", "description": f"Produce deliverable: {deliverable}", "status": "pending", "notes": ""})
+
+        elif mode_id == "debug":
+            symptoms = decisions.get("symptoms", {}).get("answer", user_request)[:200]
+            env = decisions.get("environment", {}).get("answer", "")[:150]
+            tasks.append({"id": "task-1", "description": f"Investigate symptoms: {symptoms}", "status": "pending", "notes": ""})
+            if env:
+                tasks.append({"id": "task-2", "description": f"Check environment: {env}", "status": "pending", "notes": ""})
+            tasks.append({"id": "task-3", "description": "Isolate root cause and document findings", "status": "pending", "notes": ""})
+            tasks.append({"id": "task-4", "description": "Document steps to reproduce for future reference", "status": "pending", "notes": ""})
+
+        else:
+            # Fallback — generic tasks from verification criteria
+            for i, criterion in enumerate(mode.get("verification_criteria", [])):
+                tasks.append({"id": f"task-{i+1}", "description": criterion, "status": "pending", "notes": ""})
+
+        # --- Final wave: Verification checklist ---
+        criteria = mode.get("verification_criteria", [])
         for i, criterion in enumerate(criteria):
             tasks.append({
-                "id": f"task-{i+1}",
-                "description": criterion,
+                "id": f"verify-{i+1}",
+                "description": f"[verify] {criterion}",
                 "status": "pending",
                 "notes": "",
             })
-
-        # Add tasks from non-delegated decisions that imply work
-        for area_id, decision in decisions.items():
-            if not decision.get("delegated", False):
-                answer = decision.get("answer", "")
-                if len(answer) > 20:  # substantial answer implies specific work
-                    tasks.append({
-                        "id": f"decision-{area_id}",
-                        "description": f"[{area_id}] {answer[:200]}",
-                        "status": "pending",
-                        "notes": "",
-                    })
 
         # Group into waves (max 3 tasks per wave for small model focus)
         waves = []
@@ -359,10 +401,19 @@ class Planner:
 
     def _signal_fires(self, signal: dict, decisions: dict, user_request: str) -> bool:
         """Evaluate whether an escalation signal fires."""
+        import re as _re
         sid = signal["id"]
 
         if sid == "ambiguous-scope":
-            scope_decision = decisions.get("scope") or decisions.get("question")
+            # Check the primary scope-like field for each mode:
+            # feature/refactor → scope, bugfix → reproduction or scope,
+            # research → question, debug → symptoms
+            scope_decision = (
+                decisions.get("scope")
+                or decisions.get("question")
+                or decisions.get("reproduction")
+                or decisions.get("symptoms")
+            )
             if not scope_decision:
                 return True
             answer = scope_decision.get("answer", "")
@@ -370,19 +421,25 @@ class Planner:
 
         if sid == "destructive-operation":
             destructive_keywords = [
-                "delete", "drop", "remove", "destroy", "truncate", "wipe",
-                "reset", "overwrite", "format", "purge",
+                "delete", "drop", "destroy", "truncate", "wipe",
+                "purge", "overwrite",
             ]
+            # Build word-boundary pattern to avoid matching "strip HTML" or
+            # "remove whitespace" — only match standalone destructive verbs
+            pattern = r'\b(' + '|'.join(destructive_keywords) + r')\b'
             all_text = user_request.lower()
             for d in decisions.values():
                 all_text += " " + d.get("answer", "").lower()
-            return any(kw in all_text for kw in destructive_keywords)
+            return bool(_re.search(pattern, all_text))
 
         if sid in ("api-surface-change", "public-api-break"):
             api_decision = decisions.get("interface") or decisions.get("api-preservation")
             if api_decision and not api_decision.get("delegated"):
                 answer = api_decision.get("answer", "").lower()
-                return any(w in answer for w in ["change", "break", "modify", "new endpoint", "remove"])
+                # Use word-boundary matching to avoid "unchanged" matching "change"
+                api_keywords = ["change", "break", "modify", "new endpoint", "remove"]
+                pattern = r'\b(' + '|'.join(api_keywords) + r')\b'
+                return bool(_re.search(pattern, answer))
             return False
 
         if sid == "data-mutation-risk":

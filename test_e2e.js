@@ -145,6 +145,30 @@ async function executeTool(name, args) {
       walk(args.path);
       return { pattern: args.pattern, matches: results };
     }
+    case 'synapse_new_session':
+      return fetch(`${RAG}/api/synapse/session`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: args.project_id || 'chimera', mode: args.mode, user_request: args.user_request })
+      }).then(r => r.json());
+    case 'synapse_answer':
+      return fetch(`${RAG}/api/synapse/discuss`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: args.session_id, area_id: args.area_id, answer: args.answer })
+      }).then(r => r.json());
+    case 'synapse_get_task':
+      return fetch(`${RAG}/api/synapse/task/${encodeURIComponent(args.session_id)}`).then(r => r.json());
+    case 'synapse_complete_task':
+      return fetch(`${RAG}/api/synapse/complete`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: args.session_id, task_id: args.task_id, notes: args.notes || '' })
+      }).then(r => r.json());
+    case 'synapse_escalate':
+      return fetch(`${RAG}/api/synapse/escalate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: args.session_id, reason: args.reason })
+      }).then(r => r.json());
+    case 'synapse_resume':
+      return fetch(`${RAG}/api/synapse/resume/${encodeURIComponent(args.session_id)}`).then(r => r.json());
     default:
       return { error: `Tool ${name} not wired for E2E test` };
   }
@@ -157,6 +181,9 @@ async function chat(messages, maxTokens = 600) {
   await sleep(500);
   return data;
 }
+
+let activeSynapseSession = null;
+let activeSynapseAreaId = null;
 
 function strip(content) { return (content || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim(); }
 
@@ -173,14 +200,24 @@ async function scenario(title, turns) {
     messages.push({ role: 'user', content: turn });
 
     let loops = 0;
-    while (loops < 4) {
+    while (loops < 8) {
       const r = await chat(messages);
       const m = r.choices[0].message;
 
       if (m.tool_calls && m.tool_calls.length > 0) {
         const tc = m.tool_calls[0];
-        const fnArgs = JSON.parse(tc.function.arguments);
-        console.log(`  -> ${tc.function.name}(${JSON.stringify(fnArgs)})`);
+        let fnArgs = JSON.parse(tc.function.arguments);
+        // Handle double-encoded JSON strings
+        if (typeof fnArgs === 'string') { try { fnArgs = JSON.parse(fnArgs); } catch {} }
+
+        // If model called an inner tool name directly, wrap it as call_tool
+        if (tc.function.name !== 'find_tool' && tc.function.name !== 'call_tool') {
+          console.log(`  [rewrap ${tc.function.name} → call_tool]`);
+          fnArgs = { name: tc.function.name, arguments: fnArgs };
+          tc.function.name = 'call_tool';
+          tc.function.arguments = JSON.stringify(fnArgs);
+        }
+        console.log(`  -> ${tc.function.name}(${JSON.stringify(fnArgs).slice(0, 200)})`);
 
         messages.push({
           role: 'assistant',
@@ -196,12 +233,57 @@ async function scenario(title, turns) {
             : 'No matching tools found.';
         } else if (tc.function.name === 'call_tool') {
           let toolArgs = fnArgs.arguments || {};
+          // Handle double-encoded arguments (string instead of object)
+          if (typeof toolArgs === 'string') { try { toolArgs = JSON.parse(toolArgs); } catch { toolArgs = {}; } }
           if (Object.keys(toolArgs).length === 0) {
             const { name: _n, arguments: _a, ...rest } = fnArgs;
             if (Object.keys(rest).length > 0) toolArgs = rest;
           }
+          // Auto-inject session_id when model omits it
+          const needsSession = ['synapse_answer', 'synapse_get_task', 'synapse_complete_task', 'synapse_escalate', 'synapse_resume'];
+          if (needsSession.includes(fnArgs.name) && !toolArgs.session_id && activeSynapseSession) {
+            toolArgs.session_id = activeSynapseSession;
+            console.log(`  [auto-inject session_id: ${activeSynapseSession.slice(0, 8)}...]`);
+          }
+          // Normalize synapse_new_session
+          if (fnArgs.name === 'synapse_new_session') {
+            if (!toolArgs.user_request) toolArgs.user_request = toolArgs.description || toolArgs.request || toolArgs.task || '';
+            if (toolArgs.mode && toolArgs.user_request) {
+              const req = toolArgs.user_request.toLowerCase();
+              if (toolArgs.mode === 'feature' && /\b(bug|fix|broken|crash|error|fail|wrong|issue)\b/.test(req)) toolArgs.mode = 'bugfix';
+              else if (toolArgs.mode === 'feature' && /\b(research|evaluat|compar|investigat|analyz|benchmark)\b/.test(req)) toolArgs.mode = 'research';
+              else if (toolArgs.mode === 'feature' && /\b(refactor|restructur|reorganiz|clean.?up)\b/.test(req)) toolArgs.mode = 'refactor';
+              else if (toolArgs.mode === 'feature' && /\b(debug|diagnos|troubleshoot)\b/.test(req)) toolArgs.mode = 'debug';
+            }
+          }
+          // Normalize synapse_answer — model sends answer as object or omits area_id
+          if (fnArgs.name === 'synapse_answer') {
+            if (typeof toolArgs.answer === 'object' && toolArgs.answer !== null) {
+              if (!toolArgs.area_id && toolArgs.answer.area_id) toolArgs.area_id = toolArgs.answer.area_id;
+              toolArgs.answer = toolArgs.answer.response || toolArgs.answer.content || toolArgs.answer.answer || JSON.stringify(toolArgs.answer);
+            }
+            if (!toolArgs.answer) {
+              const { session_id: _s, area_id: _a, answer: _ans, ...extra } = toolArgs;
+              const candidate = extra.response || extra.content || extra.question;
+              if (candidate) toolArgs.answer = String(candidate);
+            }
+            // Auto-inject area_id from last known question
+            if (!toolArgs.area_id && activeSynapseAreaId) {
+              toolArgs.area_id = activeSynapseAreaId;
+            }
+          }
           try {
             const result = await executeTool(fnArgs.name, toolArgs);
+            // Track active session and area_id from responses
+            if (fnArgs.name === 'synapse_new_session' && result.session_id) {
+              activeSynapseSession = result.session_id;
+            }
+            if (result.question?.area_id) {
+              activeSynapseAreaId = result.question.area_id;
+            }
+            if (result.status && result.status !== 'discussing') {
+              activeSynapseAreaId = null;
+            }
             toolResult = JSON.stringify(result, null, 2).slice(0, 1500);
             console.log(`  <- ${fnArgs.name}: ${toolResult.slice(0, 250)}...`);
           } catch (e) {
@@ -251,26 +333,40 @@ async function main() {
     'Remember that all services were confirmed healthy during the March 12th stress test'
   ]);
 
-  // SCENARIO 5: Student research workflow — upload notes, search later
-  await scenario('5. Student: Upload Notes & Study', [
+  // SCENARIO 5: Synapse — Full feature workflow
+  await scenario('5. Synapse: Feature Workflow', [
+    'Start a new feature workflow for the chimera project. I want to add a fetch_url tool that downloads webpage content and returns the text.',
+    'The scope is: a new tool called fetch_url that takes a URL, fetches the HTML, strips tags, and returns plain text. Max 50KB response. Only http/https URLs allowed.',
+    'The interface will be a simple function: fetch_url(url) returns {url, content, size}. No new API surface, it just adds a new case to the gateway switch statement.',
+  ]);
+
+  // SCENARIO 6: Synapse — Bugfix workflow with escalation
+  await scenario('6. Synapse: Bugfix with Escalation', [
+    'Start a bugfix workflow for chimera. The document search returns 0 results even when documents are indexed.',
+    'To reproduce: upload a document, then search for a word in it. Expected: results returned. Actual: empty array. This happens every time.',
+    'This is a single bug. The similarity threshold is set too high at 0.3 but nomic-embed-text only scores around 0.15-0.20 for valid matches.',
+  ]);
+
+  // SCENARIO 7: Student research workflow — upload notes, search later
+  await scenario('7. Student: Upload Notes & Study', [
     'Upload this as "cs-notes.txt": Binary search has O(log n) time complexity. It requires a sorted array. Compare the middle element, then recurse on the left or right half. Base case: element found or subarray is empty.',
     'What do my notes say about time complexity?'
   ]);
 
   // SCENARIO 6: Developer reads a local file and asks about it
-  await scenario('6. Developer: Read & Understand Code', [
+  await scenario('8. Developer: Read & Understand Code', [
     'Read the file C:/Users/sandv/Desktop/chimera/mcp-chimera-gateway/package.json',
     'What dependencies does it use?'
   ]);
 
   // SCENARIO 7: Cross-tool — web search then save findings to memory
-  await scenario('7. Research & Remember', [
+  await scenario('9. Research & Remember', [
     'Search the web for what SearXNG is',
     'Remember the key points about SearXNG from that search'
   ]);
 
   // SCENARIO 8: Memory continuity — recall from earlier in this test
-  await scenario('8. Memory Continuity', [
+  await scenario('10. Memory Continuity', [
     'What do you know about our database decisions?',
     'What do you know about SearXNG?'
   ]);

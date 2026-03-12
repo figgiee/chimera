@@ -14,6 +14,11 @@ const ALLOWED_DIRS = (process.env.ALLOWED_DIRS || "C:/Users/sandv/Desktop,C:/Use
 
 const agent = new http.Agent({ keepAlive: true, maxSockets: 10 });
 
+// Track active Synapse state so the model doesn't have to pass
+// session_id/area_id every time (small models frequently omit them)
+let activeSynapseSession = null;
+let activeSynapseAreaId = null;
+
 // ─── Tool Registry ───────────────────────────────────────────────
 // Every tool Chimera can use. Descriptions are kept SHORT to help
 // fuzzy matching without wasting tokens when returned to the model.
@@ -183,7 +188,7 @@ async function executeTool(name, args) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          project_id: args.project_id,
+          project_id: args.project_id || "chimera",
           mode: args.mode,
           user_request: args.user_request,
         }),
@@ -387,13 +392,78 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Handle both nested {"arguments": {path: "..."}} and flat {"path": "..."} formats
-      // Small models often flatten the arguments object
+      // Small models often flatten the arguments object or double-encode as JSON string
       let toolArgs = args.arguments || {};
+      if (typeof toolArgs === "string") { try { toolArgs = JSON.parse(toolArgs); } catch { toolArgs = {}; } }
       if (Object.keys(toolArgs).length === 0) {
         const { name: _name, arguments: _args, ...rest } = args;
         if (Object.keys(rest).length > 0) toolArgs = rest;
       }
+
+      // Auto-inject session_id for Synapse tools when the model omits it
+      const needsSession = ["synapse_answer", "synapse_get_task", "synapse_complete_task", "synapse_escalate", "synapse_resume"];
+      if (needsSession.includes(args.name) && !toolArgs.session_id && activeSynapseSession) {
+        toolArgs.session_id = activeSynapseSession;
+      }
+
+      // Normalize synapse_new_session — model sends description instead of user_request
+      if (args.name === "synapse_new_session") {
+        if (!toolArgs.user_request) {
+          toolArgs.user_request = toolArgs.description || toolArgs.request || toolArgs.task || "";
+        }
+        // Auto-correct mode when user_request clearly indicates a different mode
+        // (model frequently sends mode:"feature" regardless of user intent)
+        if (toolArgs.mode && toolArgs.user_request) {
+          const req = toolArgs.user_request.toLowerCase();
+          if (toolArgs.mode === "feature" && /\b(bug|fix|broken|crash|error|fail|wrong|issue)\b/.test(req)) {
+            toolArgs.mode = "bugfix";
+          } else if (toolArgs.mode === "feature" && /\b(research|evaluat|compar|investigat|analyz|benchmark)\b/.test(req)) {
+            toolArgs.mode = "research";
+          } else if (toolArgs.mode === "feature" && /\b(refactor|restructur|reorganiz|clean.?up|technical.?debt)\b/.test(req)) {
+            toolArgs.mode = "refactor";
+          } else if (toolArgs.mode === "feature" && /\b(debug|diagnos|troubleshoot|log|trace)\b/.test(req)) {
+            toolArgs.mode = "debug";
+          }
+        }
+      }
+
+      // Normalize synapse_answer args — model often sends answer as object
+      // or puts area_id inside the answer object instead of top-level
+      if (args.name === "synapse_answer") {
+        if (typeof toolArgs.answer === "object" && toolArgs.answer !== null) {
+          // Extract area_id from nested answer if missing at top level
+          if (!toolArgs.area_id && toolArgs.answer.area_id) {
+            toolArgs.area_id = toolArgs.answer.area_id;
+          }
+          // Coerce answer to string — use response/content/answer field or stringify
+          toolArgs.answer = toolArgs.answer.response || toolArgs.answer.content || toolArgs.answer.answer || JSON.stringify(toolArgs.answer);
+        }
+        // If answer is still missing, use the user's message context from extra fields
+        if (!toolArgs.answer) {
+          const { session_id: _s, area_id: _a, answer: _ans, ...extra } = toolArgs;
+          const candidate = extra.response || extra.content || extra.question;
+          if (candidate) toolArgs.answer = String(candidate);
+        }
+        // Auto-inject area_id from last known question
+        if (!toolArgs.area_id && activeSynapseAreaId) {
+          toolArgs.area_id = activeSynapseAreaId;
+        }
+      }
+
       const result = await executeTool(args.name, toolArgs);
+
+      // Track active session and area_id from Synapse responses
+      if (args.name === "synapse_new_session" && result.session_id) {
+        activeSynapseSession = result.session_id;
+      }
+      if (result.question?.area_id) {
+        activeSynapseAreaId = result.question.area_id;
+      }
+      // Clear area_id when discussion ends (status changes to executing/completed)
+      if (result.status && result.status !== "discussing") {
+        activeSynapseAreaId = null;
+      }
+
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
