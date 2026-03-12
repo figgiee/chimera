@@ -126,11 +126,53 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
+// ─── Rate limiting ───────────────────────────────────────────────
+const rateLimits = new Map(); // ip → { count, resetAt }
+const RATE_LIMIT = 30;        // max requests per window
+const RATE_WINDOW = 60 * 1000; // 1 minute
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const entry = rateLimits.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimits.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= RATE_LIMIT;
+}
+
+// ─── Dependency health check ────────────────────────────────────
+async function checkDeps() {
+  const errors = [];
+  try {
+    const r = await fetch(`${process.env.RAG_URL || 'http://localhost:8080'}/health`);
+    if (!r.ok) errors.push('RAG stack unhealthy');
+  } catch { errors.push('RAG stack unreachable'); }
+  try {
+    const r = await fetch(`http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}/v1/models`);
+    if (!r.ok) errors.push('LM Studio unhealthy');
+  } catch { errors.push('LM Studio unreachable'); }
+  return errors;
+}
+
+// ─── SSE helpers ─────────────────────────────────────────────────
+function sendSSE(res, event, data) {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
 // ─── Request handler ─────────────────────────────────────────────
 const activeLocks = new Set(); // prevent concurrent requests per session
 
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
+  const ip = req.socket.remoteAddress;
+
+  // Rate limit (skip health checks)
+  if (url.pathname !== '/health' && !checkRateLimit(ip)) {
+    sendJson(res, 429, { error: 'Rate limit exceeded. Max 30 requests per minute.' });
+    return;
+  }
 
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -140,11 +182,13 @@ async function handleRequest(req, res) {
 
   // GET /health
   if (req.method === 'GET' && url.pathname === '/health') {
-    sendJson(res, 200, {
-      status: 'ok',
-      sessions: sessions.size,
-      uptime: Math.floor(process.uptime()),
-    });
+    const deep = url.searchParams.get('deep') === 'true';
+    const result = { status: 'ok', sessions: sessions.size, uptime: Math.floor(process.uptime()) };
+    if (deep) {
+      const errors = await checkDeps();
+      if (errors.length) { result.status = 'degraded'; result.errors = errors; }
+    }
+    sendJson(res, result.status === 'ok' ? 200 : 503, result);
     return;
   }
 
@@ -169,6 +213,74 @@ async function handleRequest(req, res) {
     if (!entry) { sendJson(res, 404, { error: 'Session not found' }); return; }
     const limit = parseInt(url.searchParams.get('limit') || '50');
     sendJson(res, 200, { logs: entry.logs.slice(-limit) });
+    return;
+  }
+
+  // POST /chat/stream — SSE streaming endpoint
+  if (req.method === 'POST' && url.pathname === '/chat/stream') {
+    let body;
+    try { body = await readBody(req); } catch { sendJson(res, 400, { error: 'Invalid JSON' }); return; }
+
+    const { message, session_id, project_id, working_dir } = body;
+    if (!message || typeof message !== 'string') {
+      sendJson(res, 400, { error: 'message is required' });
+      return;
+    }
+
+    const sid = session_id || `default-${Date.now()}`;
+    if (activeLocks.has(sid)) {
+      sendJson(res, 429, { error: 'Session is busy.' });
+      return;
+    }
+
+    // Set up SSE response
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    activeLocks.add(sid);
+    const abort = new AbortController();
+    req.on('close', () => abort.abort());
+
+    const timeout = setTimeout(() => {
+      abort.abort();
+      sendSSE(res, 'error', { error: 'Timeout after 5 minutes' });
+      res.end();
+    }, 5 * 60 * 1000);
+
+    try {
+      // Create session with SSE-aware event handler
+      const { session } = getOrCreateSession(sid, project_id);
+      const originalOnEvent = session.onEvent;
+      session.onEvent = (event) => {
+        originalOnEvent(event);
+        if (!res.writableEnded) sendSSE(res, event.type, event);
+      };
+      session.signal = abort.signal;
+
+      const response = await session.processMessage(message, {
+        workingDir: working_dir || 'C:/Users/sandv/Desktop/chimera'
+      });
+
+      // Restore original handler
+      session.onEvent = originalOnEvent;
+
+      if (!abort.signal.aborted && !res.writableEnded) {
+        sendSSE(res, 'done', { response, session_id: sid, stats: session.getStats() });
+        res.end();
+      }
+    } catch (e) {
+      if (!res.writableEnded) {
+        sendSSE(res, 'error', { error: e.message });
+        res.end();
+      }
+    } finally {
+      clearTimeout(timeout);
+      activeLocks.delete(sid);
+    }
     return;
   }
 
@@ -248,8 +360,9 @@ server.listen(PORT, HOST, () => {
   console.log(`  Listening: http://${HOST}:${PORT}`);
   console.log(`  LM Studio: http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}`);
   console.log(`  RAG:       ${process.env.RAG_URL || 'http://localhost:8080'}`);
-  console.log(`\n  POST /chat  { message, session_id?, project_id?, working_dir? }`);
-  console.log(`  GET  /health`);
+  console.log(`\n  POST /chat         { message, session_id?, project_id?, working_dir? }`);
+  console.log(`  POST /chat/stream  Same as /chat but returns SSE events`);
+  console.log(`  GET  /health       ?deep=true to check dependencies`);
   console.log(`  GET  /sessions/:id/stats`);
   console.log(`  GET  /sessions/:id/logs\n`);
 });
