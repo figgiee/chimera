@@ -4,7 +4,6 @@
 	import InputBar from '$lib/components/InputBar.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
-	import LoadingIndicator from '$lib/components/LoadingIndicator.svelte';
 </script>
 
 <div class="flex h-screen bg-background text-foreground">
