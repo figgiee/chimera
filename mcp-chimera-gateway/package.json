@@ -1,0 +1,9 @@
+{
+  "name": "mcp-chimera-gateway",
+  "version": "1.0.0",
+  "description": "Meta-MCP gateway for Chimera - exposes find_tool/call_tool to minimize token overhead",
+  "main": "index.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  }
+}
