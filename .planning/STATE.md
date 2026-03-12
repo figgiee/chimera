@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 2 of 4 (Core Chat Loop)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-12 — Completed 02-01-PLAN.md (chat data layer)
+Last activity: 2026-03-12 — Completed 02-02-PLAN.md (chat UI components)
 
-Progress: [████░░░░░░] 33%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: ~4 min/plan
-- Total execution time: ~12 min
+- Total execution time: ~15 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-static-shell | 2 | ~8 min | ~4 min |
-| 02-core-chat-loop | 1 | ~4 min | ~4 min |
+| 02-core-chat-loop | 2 | ~7 min | ~3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (API prefix migration), 01-02 (SvelteKit scaffold), 02-01 (chat data layer)
-- Trend: Fast — plans well-scoped, type errors caught and fixed automatically
+- Last 5 plans: 01-01 (API prefix migration), 01-02 (SvelteKit scaffold), 02-01 (chat data layer), 02-02 (chat UI components)
+- Trend: Fast — plans well-scoped, svelte-check catches issues early
 
 *Updated after each plan completion*
 
@@ -52,6 +52,9 @@ Recent decisions affecting current work:
 - [01-02]: Zinc oklch palette used for dark theme (bg-background maps to oklch(0.141 0.005 285.823) in dark mode)
 - [02-01]: ReadableStreamDefaultReader used instead of for-await on ReadableStream (TypeScript DOM lib limitation)
 - [02-01]: AbortError from stop() silently returns — does not produce error UI or error message
+- [02-02-A]: $derived used for timestamp in MessageBubble (avoids state_referenced_locally warning)
+- [02-02-B]: Code copy buttons injected imperatively via injectCopyButtons() after innerHTML swap
+- [02-02-C]: ChatWindow auto-scroll effect tracks messages.length AND chatStore.status
 
 ### Pending Todos
 
@@ -65,6 +68,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12 22:06 UTC
-Stopped at: Completed 02-01-PLAN.md — chat data layer (types, SSEClient, ChatStore, markdown)
+Last session: 2026-03-12 22:13 UTC
+Stopped at: Completed 02-02-PLAN.md — chat UI components (MessageBubble, InputBar, ChatWindow, EmptyState, +page.svelte)
 Resume file: None
