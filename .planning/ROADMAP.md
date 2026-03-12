@@ -45,12 +45,12 @@ Plans:
   3. User can stop a generation mid-stream and the UI returns to idle cleanly
   4. User sees a thinking/loading indicator during the 5-15 second model inference gap before the first token
   5. User sees an inline error message with a retry button when a request fails, and can switch between dark and light mode with the preference saved
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: Build fetch + ReadableStream SSE client, ChatState machine (idle/streaming/done/error), AbortController lifecycle
-- [ ] 02-02: Build ChatInput and ChatMessage components — textarea auto-grow, two-mode markdown rendering (streaming-markdown + marked + DOMPurify), code copy buttons
-- [ ] 02-03: Wire dark mode toggle, loading indicator, error display with retry, responsive layout with collapsible sidebar breakpoint
+- [ ] 02-01-PLAN.md — Install dependencies, create types, SSE client, ChatStore state machine, and markdown rendering utilities
+- [ ] 02-02-PLAN.md — Build MessageBubble, InputBar, ChatWindow, EmptyState components and wire into +page.svelte
+- [ ] 02-03-PLAN.md — Add dark mode toggle, loading indicator, error display with retry, highlight.js themes, responsive layout, and human verification
 
 ### Phase 3: Tool + Synapse Visualization
 **Goal**: Users can see every tool call Chimera makes (name, status, duration, arguments, result) and watch Synapse workflows unfold in real-time as a structured progress panel with Q&A cards, task checklist, and cancel control
