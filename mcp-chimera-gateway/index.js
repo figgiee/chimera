@@ -129,7 +129,7 @@ async function executeTool(name, args) {
         body: JSON.stringify({
           query: args.query,
           limit: args.limit || 5,
-          threshold: args.threshold || 0.3,
+          threshold: args.threshold || 0.1,
           type: "documents",
         }),
       });

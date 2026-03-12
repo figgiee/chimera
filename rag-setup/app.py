@@ -108,7 +108,7 @@ class SearchRequest(BaseModel):
     query: str
     limit: int = 5
     type: str = "documents"  # "documents" or "web"
-    threshold: float = 0.3  # similarity threshold
+    threshold: float = 0.1  # similarity threshold
 
 
 class ConversationStoreRequest(BaseModel):

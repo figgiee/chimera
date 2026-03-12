@@ -21,7 +21,7 @@ class SearchService:
         embeddings_service,
         db,
         limit: int = 5,
-        threshold: float = 0.3
+        threshold: float = 0.1
     ) -> List[dict]:
         """Search documents using vector embeddings."""
         try:
