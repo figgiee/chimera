@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 1 of 4 (Static Shell)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-03-12 — Roadmap created for v1.0 Web UI milestone
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-03-12 — Completed 01-02-PLAN.md (SvelteKit scaffold + build verified)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 2
+- Average duration: ~4 min/plan
+- Total execution time: ~8 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-static-shell | 2 | ~8 min | ~4 min |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: 01-01 (API prefix migration), 01-02 (SvelteKit scaffold)
+- Trend: Fast — both plans well-scoped
 
 *Updated after each plan completion*
 
@@ -46,10 +46,13 @@ Recent decisions affecting current work:
 - [Pre-v1.0]: Use fetch + ReadableStream for SSE — NOT native EventSource (Chimera uses POST-based SSE)
 - [Pre-v1.0]: DOMPurify mandatory on all AI markdown output (CVE-2026-22813 documents exact attack vector)
 - [Pre-v1.0]: Two-mode markdown: streaming-markdown during generation, marked + highlight.js after done event
+- [01-02]: Tailwind v4 uses @tailwindcss/vite Vite plugin — no postcss.config.js, no tailwind.config file
+- [01-02]: shadcn-svelte CLI (v1.1.1) requires interactive mode — create components.json + theme manually for CI/automation contexts
+- [01-02]: Zinc oklch palette used for dark theme (bg-background maps to oklch(0.141 0.005 285.823) in dark mode)
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -59,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Roadmap created — ready to begin Phase 1 planning
+Last session: 2026-03-12T20:49:43Z
+Stopped at: Completed 01-02-PLAN.md — Phase 1 Static Shell complete, ready for Phase 2
 Resume file: None
