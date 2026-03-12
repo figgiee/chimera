@@ -77,5 +77,5 @@ class EmbeddingsService:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{self.tei_url}/health")
                 return response.status_code == 200
-        except:
+        except Exception:
             return False

@@ -39,16 +39,16 @@ async def lifespan(app: FastAPI):
     """Initialize and cleanup resources."""
     global db, embeddings_service, search_service, llm_service, synapse_engine
 
-    logger.info("Starting Nexus RAG Server...")
+    logger.info("Starting Chimera RAG Server...")
 
     try:
         # Initialize database
         db = Database(
             host=os.getenv("POSTGRES_HOST", "localhost"),
             port=int(os.getenv("POSTGRES_PORT", 5432)),
-            user=os.getenv("POSTGRES_USER", "nexus"),
-            password=os.getenv("POSTGRES_PASSWORD", "nexus_secure_password"),
-            database=os.getenv("POSTGRES_DB", "nexus_rag")
+            user=os.getenv("POSTGRES_USER", "chimera"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            database=os.getenv("POSTGRES_DB", "chimera_rag")
         )
         await db.connect()
         logger.info("Database connected")
@@ -695,7 +695,7 @@ async def _extract_text(filename: str, content: bytes) -> str:
             return text
         except Exception as e:
             logger.error(f"PDF extraction failed: {e}")
-            return "[PDF extraction failed]"
+            raise Exception(f"PDF extraction failed: {e}")
     elif filename.endswith(".docx"):
         try:
             from docx import Document as DocxDocument
@@ -704,7 +704,7 @@ async def _extract_text(filename: str, content: bytes) -> str:
             return text
         except Exception as e:
             logger.error(f"DOCX extraction failed: {e}")
-            return "[DOCX extraction failed]"
+            raise Exception(f"DOCX extraction failed: {e}")
     else:
         return content.decode("utf-8", errors="ignore")
 

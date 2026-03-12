@@ -13,7 +13,6 @@ pgvector==0.2.4
 
 # Web client
 httpx==0.25.2
-requests==2.31.0
 
 # File handling
 python-multipart==0.0.6
