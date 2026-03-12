@@ -20,6 +20,7 @@ COPY db.py .
 COPY embeddings.py .
 COPY search.py .
 COPY llm.py .
+COPY synapse.py .
 
 # Create directories
 RUN mkdir -p /app/data /app/documents

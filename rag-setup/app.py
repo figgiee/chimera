@@ -164,7 +164,7 @@ async def health() -> HealthResponse:
     if search_service:
         try:
             # Test search service connectivity
-            await search_service.test_health()
+            await search_service.health_check()
             services["search"] = "ok"
         except Exception as e:
             services["search"] = f"error: {str(e)[:100]}"
