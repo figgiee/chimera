@@ -31,6 +31,9 @@ build/
 # Logs
 *.log
 
+# Chimera workspace (orchestrator state, logs)
+.chimera/
+
 # External MCP repos (cloned separately)
 mcp-pdf-reader/
 mcp-screenshot/

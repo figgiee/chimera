@@ -7,6 +7,7 @@ const {
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { execSync } = require("node:child_process");
 
 const RAG_URL = process.env.RAG_SERVER_URL || "http://localhost:8080";
 const SEARXNG_URL = process.env.SEARXNG_URL || "http://localhost:8888";
@@ -49,6 +50,7 @@ const TOOLS = [
   { name: "list_directory", category: "fs", desc: "List files in a directory", args: "path" },
   { name: "search_files", category: "fs", desc: "Search for files by name pattern", args: "path, pattern" },
   { name: "read_pdf", category: "fs", desc: "Read text content from a PDF file", args: "path" },
+  { name: "run_command", category: "shell", desc: "Run a shell command in a directory", args: "command, cwd?" },
 ];
 
 // ─── Keyword aliases (maps common intent words to tool names) ────
@@ -59,6 +61,8 @@ const ALIASES = {
   save: "write_file", create: "write_file", write: "write_file",
   ls: "list_directory", dir: "list_directory", folder: "list_directory", files: "list_directory",
   find: "search_files", locate: "search_files", grep: "search_files",
+  run: "run_command", execute: "run_command", shell: "run_command", terminal: "run_command",
+  npm: "run_command", git: "run_command", node: "run_command", pip: "run_command",
   pdf: "read_pdf", document: "search_documents",
   remember: "store_conversation", memory: "store_conversation", memorize: "store_conversation",
   recall: "recall_conversation", past: "recall_conversation", history: "recall_conversation",
@@ -121,6 +125,35 @@ async function httpJSON(url, options = {}) {
 function isPathAllowed(filePath) {
   const resolved = path.resolve(filePath);
   return ALLOWED_DIRS.some(dir => resolved.startsWith(path.resolve(dir)));
+}
+
+// ─── Security: sensitive file blocklist ──────────────────────────
+const SENSITIVE_PATTERNS = [
+  /\.env$/i, /\.env\./i, /\.key$/i, /\.pem$/i, /\.p12$/i,
+  /credential/i, /secret/i, /\.ssh[/\\]/i, /id_rsa/i, /id_ed25519/i,
+  /\.gnupg[/\\]/i, /\.aws[/\\]/i, /token\.json$/i,
+];
+
+function isSensitivePath(filePath) {
+  const resolved = path.resolve(filePath);
+  return SENSITIVE_PATTERNS.some(p => p.test(resolved));
+}
+
+// ─── Security: command allowlist ─────────────────────────────────
+// Only these commands (and their subcommands) are permitted.
+// Everything else is blocked by default.
+const COMMAND_ALLOWLIST = [
+  "node", "npm", "npx", "git", "ls", "dir", "cat", "type",
+  "head", "tail", "grep", "rg", "find", "wc", "echo", "mkdir",
+  "cp", "copy", "mv", "move", "touch", "sed", "awk", "sort",
+  "python", "pip", "docker", "docker-compose",
+];
+
+function isCommandAllowed(command) {
+  // Extract the first word (the binary being invoked)
+  const first = command.trim().split(/[\s|;&]/)[0].replace(/^['"]|['"]$/g, "");
+  const bin = path.basename(first).toLowerCase().replace(/\.exe$/, "").replace(/\.cmd$/, "");
+  return COMMAND_ALLOWLIST.includes(bin);
 }
 
 // ─── Tool execution router ───────────────────────────────────────
@@ -248,6 +281,7 @@ async function executeTool(name, args) {
     case "read_file": {
       if (!args.path) throw new Error("path is required");
       if (!isPathAllowed(args.path)) throw new Error(`Access denied: ${args.path}`);
+      if (isSensitivePath(args.path)) throw new Error(`Blocked: ${path.basename(args.path)} contains sensitive data`);
       const content = fs.readFileSync(args.path, "utf-8");
       return { path: args.path, content };
     }
@@ -306,6 +340,25 @@ async function executeTool(name, args) {
         size: content.length,
         note: "PDF binary loaded. Use upload_document to index it, or use search_documents if already indexed.",
       };
+    }
+
+    case "run_command": {
+      if (!args.command) throw new Error("command is required");
+      const cwd = args.cwd || "C:/Users/sandv/Desktop";
+      if (!isPathAllowed(cwd)) throw new Error(`Access denied: ${cwd}`);
+      if (!isCommandAllowed(args.command)) throw new Error(`Command not allowed: "${args.command.split(/\s/)[0]}". Allowed: ${COMMAND_ALLOWLIST.slice(0, 10).join(", ")}...`);
+      try {
+        const output = execSync(args.command, {
+          cwd,
+          timeout: 30000,
+          maxBuffer: 1024 * 512,
+          encoding: "utf-8",
+          shell: true,
+        });
+        return { command: args.command, cwd, output: output.slice(0, 10000) };
+      } catch (e) {
+        return { command: args.command, cwd, error: e.message.slice(0, 2000), exitCode: e.status };
+      }
     }
 
     default:
