@@ -241,14 +241,8 @@ async function chat(messages, { maxTokens = 1200, useTools = true } = {}) {
 
 function strip(content) {
   let s = (content || '')
-    .replace(/<think>[\s\S]*?<\/think>/g, '')       // XML think tags
-    .replace(/^Thinking Process:[\s\S]*?(?=\n\n)/g, '') // Plain-text thinking (Qwen quirk)
-    .replace(/^(?:\d+\.\s+\*\*[^*]+\*\*[\s\S]*?)(?=\n[A-Z])/g, (m) => {
-      // If it starts with numbered bold items and looks like thinking, strip it
-      return /^\d+\.\s+\*\*Analyze|^\d+\.\s+\*\*Understand|^\d+\.\s+\*\*Consider/m.test(m) ? '' : m;
-    })
+    .replace(/<think>[\s\S]*?<\/think>/g, '')  // XML think tags (Qwen wraps reasoning in these)
     .trim();
-  // If stripping left nothing, return a generic answer
   return s || 'Acknowledged.';
 }
 
