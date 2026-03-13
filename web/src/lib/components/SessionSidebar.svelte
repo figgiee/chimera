@@ -219,6 +219,9 @@
 												: 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
 										>
 											<span class="truncate font-medium text-foreground leading-tight">{session.title}</span>
+											{#if session.lastMessagePreview}
+												<span class="truncate text-[11px] text-muted-foreground/70 leading-tight">{session.lastMessagePreview}</span>
+											{/if}
 											<span class="text-[10px] text-muted-foreground">{relativeTime(session.lastActive)}</span>
 										</button>
 										<!-- Trash icon, visible on hover -->
