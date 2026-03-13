@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 4 of 4 (Sessions, Health + Knowledge)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-03-13 — Phase 3 Tool + Synapse Visualization verified and complete
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-03-13 — Completed 04-01 (sessions endpoints + typed API client)
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: ~4 min/plan
-- Total execution time: ~30 min
+- Total plans completed: 9
+- Average duration: ~3.7 min/plan
+- Total execution time: ~33 min
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [████████░░] 75%
 | 01-static-shell | 2 | ~8 min | ~4 min |
 | 02-core-chat-loop | 3 | ~11 min | ~3.7 min |
 | 03-tool-synapse-visualization | 3 | ~7 min | ~2.3 min |
+| 04-sessions-health-knowledge | 1/3 | ~3 min | ~3 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02, 02-03, 03-01, 03-02, 03-03
+- Last 5 plans: 03-01, 03-02, 03-03, 04-01
 - Trend: Fast — plans well-scoped, svelte-check catches issues early
 
 *Updated after each plan completion*
@@ -67,6 +68,11 @@ Recent decisions affecting current work:
 - [03-03-A]: CheckCircle2 and MessageCircleQuestion are alias re-exports in lucide-svelte v0.577.0 (to circle-check.svelte and message-circle-question-mark.svelte) — named imports work as documented
 - [03-03-B]: ChatWindow dispatches on message.role to select renderer — SynapsePanel for 'synapse', MessageBubble for all other roles
 - [03-03-C]: SynapsePanel cancel (SYN-04) uses existing InputBar stop button — no new cancel UI needed inside panel
+- [04-01-A]: GET /api/sessions uses exact pathname match checked before parameterized :id routes — avoids ambiguity
+- [04-01-B]: DELETE /api/sessions/:id placed after /stats and /logs handlers — regex /api/sessions/([^/]+) would match all three
+- [04-01-C]: fetchHealth returns degraded status object on network failure (never throws) — callers can always render UI
+- [04-01-D]: fetchModel returns 'Unknown' on any LM Studio failure (never throws) — graceful degradation for model display
+- [04-01-E]: RAG_BASE is a direct URL (not proxied) — document endpoints hit the RAG stack on port 8080 directly
 
 ### Pending Todos
 
@@ -74,11 +80,11 @@ None.
 
 ### Blockers/Concerns
 
-- [Phase 4]: GET /api/sessions list endpoint does not exist yet — must be added to chimera-chat.js before session sidebar can be built
+- [Phase 4 - RESOLVED by 04-01]: GET /api/sessions endpoint now exists in chimera-chat.js
 - [Phase 4]: /api/documents endpoints (upload, list, delete) are in the RAG stack, not chimera-chat.js — confirm API contract before building knowledge UI
 
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Phase 3 verified (4/5 must-haves + 1 gap fixed) — ready for Phase 4 planning
+Stopped at: Completed 04-01-PLAN.md — sessions endpoints + typed API client
 Resume file: None
