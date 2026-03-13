@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** User says what they want in plain language, framework handles the rest
-**Current focus:** Phase 4 — Sessions, Health + Knowledge
+**Current focus:** Phase 4 complete — all phases done, v1.0 feature complete
 
 ## Current Position
 
 Phase: 4 of 4 (Sessions, Health + Knowledge)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-13 — Completed 04-02 (session sidebar + health bar UI)
+Plan: 3 of 3 in current phase
+Status: Phase complete — all phases complete
+Last activity: 2026-03-13 — Completed 04-03 (knowledge sidebar + memory recall indicator)
 
-Progress: [█████████░] 87%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: ~3.7 min/plan
-- Total execution time: ~33 min
+- Total plans completed: 10
+- Average duration: ~3.5 min/plan
+- Total execution time: ~35 min
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [█████████░] 87%
 | 01-static-shell | 2 | ~8 min | ~4 min |
 | 02-core-chat-loop | 3 | ~11 min | ~3.7 min |
 | 03-tool-synapse-visualization | 3 | ~7 min | ~2.3 min |
-| 04-sessions-health-knowledge | 2/3 | ~6 min | ~3 min |
+| 04-sessions-health-knowledge | 3/3 | ~8 min | ~2.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02, 03-03, 04-01, 04-02
+- Last 5 plans: 03-03, 04-01, 04-02, 04-03
 - Trend: Fast — plans well-scoped, svelte-check catches issues early
 
 *Updated after each plan completion*
@@ -78,6 +78,11 @@ Recent decisions affecting current work:
 - [04-02-C]: RAG and Search share same errors[] parse but render as separate dots — matches user's three-indicator locked decision
 - [04-02-D]: Collapsed sidebar toggle is a fixed-position button outside aside element — stays clickable at max-width 0
 - [04-02-E]: Sidebar open by default per RESEARCH.md discretion recommendation
+- [04-03-A]: dragCount counter (not boolean) for drag-and-drop state — prevents flicker from child element drag events
+- [04-03-B]: Upload first file only when multiple dropped (v1 simplicity) — re-upload same file enabled by resetting input.value
+- [04-03-C]: hasMemoryRecall derived from toolCalls (no backend change) — detects recall_conversation with !hadError
+- [04-03-D]: Assistant name header row added above bubble to host Brain icon — natural placement, no floating/overlay needed
+- [04-03-E]: Client-side document search filter — personal knowledge base is small, avoids per-keystroke API calls
 
 ### Pending Todos
 
@@ -85,11 +90,10 @@ None.
 
 ### Blockers/Concerns
 
-- [Phase 4 - RESOLVED by 04-01]: GET /api/sessions endpoint now exists in chimera-chat.js
-- [Phase 4]: /api/documents endpoints (upload, list, delete) are in the RAG stack, not chimera-chat.js — confirm API contract before building knowledge UI
+None — all phases complete.
 
 ## Session Continuity
 
-Last session: 2026-03-13T05:48:12Z
-Stopped at: Completed 04-02-PLAN.md — session sidebar + health bar UI
+Last session: 2026-03-13T05:54:09Z
+Stopped at: Completed 04-03-PLAN.md — knowledge sidebar + memory recall indicator
 Resume file: None
