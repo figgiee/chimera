@@ -218,6 +218,20 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // GET /api/sessions — list all active sessions
+  if (req.method === 'GET' && url.pathname === '/api/sessions') {
+    const sessionList = [];
+    for (const [id, entry] of sessions) {
+      const firstUserMsg = entry.logs.find(l => l.type === 'user_message');
+      const title = firstUserMsg ? firstUserMsg.text.slice(0, 50) : 'New conversation';
+      const messageCount = entry.logs.filter(l => l.type === 'user_message').length;
+      sessionList.push({ id, title, created: entry.created, lastActive: entry.lastActive, messageCount });
+    }
+    sessionList.sort((a, b) => b.lastActive - a.lastActive);
+    sendJson(res, 200, { sessions: sessionList });
+    return;
+  }
+
   // GET /api/sessions/:id/stats
   const statsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stats$/);
   if (req.method === 'GET' && statsMatch) {
@@ -239,6 +253,16 @@ async function handleRequest(req, res) {
     if (!entry) { sendJson(res, 404, { error: 'Session not found' }); return; }
     const limit = parseInt(url.searchParams.get('limit') || '50');
     sendJson(res, 200, { logs: entry.logs.slice(-limit) });
+    return;
+  }
+
+  // DELETE /api/sessions/:id — remove a session
+  const deleteSessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+  if (req.method === 'DELETE' && deleteSessionMatch) {
+    const id = deleteSessionMatch[1];
+    if (!sessions.has(id)) { sendJson(res, 404, { error: 'Session not found' }); return; }
+    sessions.delete(id);
+    sendJson(res, 200, { status: 'deleted', session_id: id });
     return;
   }
 
@@ -389,6 +413,8 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  POST /api/chat         { message, session_id?, project_id?, working_dir? }`);
   console.log(`  POST /api/chat/stream  Same as /api/chat but returns SSE events`);
   console.log(`  GET  /api/health       ?deep=true to check dependencies`);
+  console.log(`  GET  /api/sessions             List all sessions (sorted by lastActive)`);
+  console.log(`  DELETE /api/sessions/:id       Delete a session`);
   console.log(`  GET  /api/sessions/:id/stats`);
   console.log(`  GET  /api/sessions/:id/logs\n`);
 });
