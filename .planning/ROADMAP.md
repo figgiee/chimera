@@ -79,12 +79,12 @@ Plans:
   3. User can drag and drop documents onto the UI to upload them to the knowledge base
   4. User can browse, search, and delete documents in the knowledge base from within the UI
   5. User sees a subtle indicator in the chat when the assistant recalled something from conversation memory
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: Build session sidebar — list sessions (requires new GET /api/sessions endpoint), new chat, switch, delete; sessionStorage persistence for tab-lifetime history
-- [ ] 04-02: Build system health bar — poll GET /api/health, show LM Studio/RAG/Search indicators, model name, Local privacy badge; wire KNOW-03 memory recall indicator to SSE event
-- [ ] 04-03: Build knowledge management UI — drag-and-drop upload to POST /api/documents/upload, document browser with search and delete against GET/DELETE /api/documents
+- [ ] 04-01-PLAN.md — Add backend session endpoints and typed API client layer
+- [ ] 04-02-PLAN.md — Build session sidebar and health bar components, wire into page layout
+- [ ] 04-03-PLAN.md — Build knowledge management sidebar tab and memory recall indicator
 
 ## Progress
 
