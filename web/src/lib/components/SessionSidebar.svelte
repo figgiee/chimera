@@ -3,6 +3,7 @@
 	import { chatStore } from '$lib/chat/ChatStore.svelte.js';
 	import { fetchSessions, deleteSession } from '$lib/chat/api.js';
 	import type { SessionInfo } from '$lib/chat/types.js';
+	import KnowledgeSidebar from './KnowledgeSidebar.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
@@ -239,9 +240,9 @@
 				{/if}
 			</div>
 		{:else}
-			<!-- Knowledge tab placeholder (Plan 03 will replace this) -->
-			<div class="flex-1 flex items-center justify-center p-4">
-				<p class="text-xs text-muted-foreground text-center">Knowledge base — coming soon</p>
+			<!-- Knowledge tab -->
+			<div class="flex-1 overflow-hidden">
+				<KnowledgeSidebar />
 			</div>
 		{/if}
 	</div>
