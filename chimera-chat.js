@@ -225,7 +225,9 @@ async function handleRequest(req, res) {
       const firstUserMsg = entry.logs.find(l => l.type === 'user_message');
       const title = firstUserMsg ? firstUserMsg.text.slice(0, 50) : 'New conversation';
       const messageCount = entry.logs.filter(l => l.type === 'user_message').length;
-      sessionList.push({ id, title, created: entry.created, lastActive: entry.lastActive, messageCount });
+      const lastLog = entry.logs.length ? entry.logs[entry.logs.length - 1] : null;
+      const lastMessagePreview = lastLog?.text ? (lastLog.text.length > 80 ? lastLog.text.slice(0, 80) + '...' : lastLog.text) : '';
+      sessionList.push({ id, title, created: entry.created, lastActive: entry.lastActive, messageCount, lastMessagePreview });
     }
     sessionList.sort((a, b) => b.lastActive - a.lastActive);
     sendJson(res, 200, { sessions: sessionList });

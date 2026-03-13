@@ -188,6 +188,7 @@ export interface SessionInfo {
   created: number;
   lastActive: number;
   messageCount: number;
+  lastMessagePreview: string;
 }
 
 /** Response from GET /api/health?deep=true. */
