@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Core Chat Loop** - Streaming chat experience with markdown, code highlighting, stop/cancel, and error handling
 - [x] **Phase 3: Tool + Synapse Visualization** - Inline tool call display and real-time Synapse workflow progress panel
 - [x] **Phase 4: Sessions, Health + Knowledge** - Session sidebar, system health bar, and knowledge base management
-- [ ] **Phase 5: Audit Gap Closure** - Fix failed task status, session history restore, and wire unused backend endpoints
+- [x] **Phase 5: Audit Gap Closure** - Fix failed task status, session history restore, and wire unused backend endpoints
 
 ## Phase Details
 
@@ -101,7 +101,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md — Fetch session logs on switch to hydrate message history, verify other audit gaps already closed
+- [x] 05-01-PLAN.md — Fetch session logs on switch to hydrate message history, verify other audit gaps already closed
 
 ## Progress
 
@@ -114,4 +114,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Core Chat Loop | 3/3 | Complete | 2026-03-12 |
 | 3. Tool + Synapse Visualization | 3/3 | Complete | 2026-03-13 |
 | 4. Sessions, Health + Knowledge | 4/4 | Complete | 2026-03-13 |
-| 5. Audit Gap Closure | 0/1 | Planned | — |
+| 5. Audit Gap Closure | 1/1 | Complete | 2026-03-13 |

@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** User says what they want in plain language, framework handles the rest
-**Current focus:** Phase 5 — closing audit gaps before milestone completion
+**Current focus:** All phases complete — ready for milestone completion
 
 ## Current Position
 
-Phase: 5 of 5 (Audit Gap Closure)
-Plan: 0 of 1 in current phase
-Status: Phase created, needs planning
-Last activity: 2026-03-13 — Created Phase 5 from milestone audit gaps
+Phase: 5 of 5 (Audit Gap Closure) — COMPLETE
+Plan: 1 of 1 in current phase
+Status: All phases complete, milestone ready for audit/completion
+Last activity: 2026-03-13 — Phase 5 executed and verified
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: ~3.4 min/plan
-- Total execution time: ~37 min
+- Total plans completed: 12
+- Average duration: ~3.3 min/plan
+- Total execution time: ~40 min
 
 **By Phase:**
 
@@ -30,10 +30,11 @@ Progress: [█████████░] 92%
 | 01-static-shell | 2 | ~8 min | ~4 min |
 | 02-core-chat-loop | 3 | ~11 min | ~3.7 min |
 | 03-tool-synapse-visualization | 3 | ~7 min | ~2.3 min |
-| 04-sessions-health-knowledge | 4/4 | ~10 min | ~2.5 min |
+| 04-sessions-health-knowledge | 4 | ~10 min | ~2.5 min |
+| 05-audit-gap-closure | 1 | ~3 min | ~3 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03, 04-01, 04-02, 04-03
+- Last 5 plans: 04-01, 04-02, 04-03, 04-04, 05-01
 - Trend: Fast — plans well-scoped, svelte-check catches issues early
 
 *Updated after each plan completion*
@@ -83,10 +84,13 @@ Recent decisions affecting current work:
 - [04-03-C]: hasMemoryRecall derived from toolCalls (no backend change) — detects recall_conversation with !hadError
 - [04-03-D]: Assistant name header row added above bubble to host Brain icon — natural placement, no floating/overlay needed
 - [04-03-E]: Client-side document search filter — personal knowledge base is small, avoids per-keystroke API calls
+- [05-01-A]: fetchSessionLogs returns empty array on failure (never throws) — session switch works even if logs endpoint unavailable
+- [05-01-B]: logsToMessages uses crypto.randomUUID() for message IDs — display-only, not server-tracked
+- [05-01-C]: Synapse events reconstructed with same state machine logic as ChatStore.onEvent — qa/executing/complete phases
 
 ### Pending Todos
 
-- Plan Phase 5 (05-01-PLAN.md)
+None.
 
 ### Blockers/Concerns
 
@@ -95,5 +99,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Created Phase 5 from milestone audit gaps
+Stopped at: All phases complete — ready for milestone audit/completion
 Resume file: None
