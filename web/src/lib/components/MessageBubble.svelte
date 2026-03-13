@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Copy, Check, RotateCcw } from 'lucide-svelte';
+	import { Copy, Check, RotateCcw, Brain } from 'lucide-svelte';
+	import { Tooltip } from 'bits-ui';
 	import ToolCallBlock from './ToolCallBlock.svelte';
 	import type { Message } from '$lib/chat/types.js';
 	import { chatStore } from '$lib/chat/ChatStore.svelte.js';
@@ -130,6 +131,17 @@
 			minute: '2-digit'
 		})
 	);
+
+	// ---------------------------------------------------------------------------
+	// Memory recall indicator
+	// Detect recall_conversation tool call per RESEARCH.md Pitfall 6 — option (b):
+	// read from existing tool events, no backend change needed.
+	// ---------------------------------------------------------------------------
+
+	const hasMemoryRecall = $derived(
+		message.role === 'assistant' &&
+			(message.toolCalls?.some((tc) => tc.tool === 'recall_conversation' && !tc.hadError) ?? false)
+	);
 </script>
 
 <!-- User message -->
@@ -154,6 +166,26 @@
 {:else if message.role === 'assistant'}
 	<div class="group flex w-full justify-start">
 		<div class="relative max-w-[80%]">
+			<!-- Assistant name row with optional memory recall indicator -->
+			<div class="flex items-center gap-1 mb-1 px-1">
+				<span class="text-[10px] font-medium text-muted-foreground">Assistant</span>
+				{#if hasMemoryRecall}
+					<Tooltip.Provider>
+						<Tooltip.Root delayDuration={300}>
+							<Tooltip.Trigger class="inline-flex text-muted-foreground hover:text-foreground ml-0.5">
+								<Brain size={12} />
+							</Tooltip.Trigger>
+							<Tooltip.Portal>
+								<Tooltip.Content
+									class="rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow z-50"
+								>
+									Memory recalled from past conversations
+								</Tooltip.Content>
+							</Tooltip.Portal>
+						</Tooltip.Root>
+					</Tooltip.Provider>
+				{/if}
+			</div>
 			<div class="rounded-2xl rounded-bl-sm bg-muted px-4 py-3 text-sm text-foreground">
 				{#if message.toolCalls?.length}
 					<div class="space-y-1.5 mb-3">
