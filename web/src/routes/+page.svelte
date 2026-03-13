@@ -4,14 +4,19 @@
 	import InputBar from '$lib/components/InputBar.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
+	import SessionSidebar from '$lib/components/SessionSidebar.svelte';
+	import HealthBar from '$lib/components/HealthBar.svelte';
 </script>
 
 <div class="flex h-screen bg-background text-foreground">
-	<!-- Sidebar placeholder: hidden on tablet, visible on desktop (lg+). Populated in Phase 4. -->
-	<aside class="hidden lg:flex lg:w-64 border-r border-border flex-col"></aside>
+	<!-- Session sidebar: always in DOM, collapse managed by component via CSS max-width -->
+	<SessionSidebar />
 
 	<!-- Main content area -->
 	<div class="flex flex-col flex-1 min-w-0">
+		<!-- Health status bar: full-width, above the header -->
+		<HealthBar />
+
 		<!-- Header bar -->
 		<header class="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
 			<h1 class="text-lg font-semibold">Chimera</h1>
