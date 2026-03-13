@@ -89,7 +89,7 @@ Plans:
 - [x] 04-04-PLAN.md — Add last-message preview to session sidebar rows (gap closure)
 
 ### Phase 5: Audit Gap Closure
-**Goal**: Close all gaps identified by milestone audit — fix failed task rendering, restore session message history on switch, and wire existing but unconsumed backend endpoints into the frontend
+**Goal**: Close all gaps identified by milestone audit — restore session message history on switch and verify previously-flagged issues (failed task rendering, dead imports) are already resolved
 **Depends on**: Phase 4
 **Requirements**: SYN-03 (complete failed variant), SESS-03 (session switch shows history)
 **Gap Closure**: Closes all gaps from v1.0-MILESTONE-AUDIT.md
@@ -98,10 +98,10 @@ Plans:
   2. User switches to an existing session and sees the prior message history (not a blank chat)
   3. Dead `LoadingIndicator` import removed from +page.svelte (if present — audit may be false positive)
   4. Session stats/logs data surfaced somewhere in the frontend UI (or endpoints removed if truly unneeded)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md — Fix SYN-03 failed variant, add session messages endpoint, wire session history restore, clean up tech debt
+- [ ] 05-01-PLAN.md — Fetch session logs on switch to hydrate message history, verify other audit gaps already closed
 
 ## Progress
 
