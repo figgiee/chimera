@@ -1,5 +1,5 @@
-import type { Message, ChatStatus } from './types.js';
 import { streamChat } from './SSEClient.js';
+import type { ChatStatus, Message, SynapseState, ToolCall } from './types.js';
 
 /**
  * Reactive ChatStore using Svelte 5 runes pattern.
@@ -7,6 +7,8 @@ import { streamChat } from './SSEClient.js';
  * Manages the full lifecycle of a Chimera chat session:
  * - Tracks messages, status, activity indicator, and errors.
  * - Drives the idle → loading → streaming → idle state machine.
+ * - Buffers tool calls during a request and attaches them to the assistant message on done.
+ * - Manages Synapse workflow state as a dedicated role:'synapse' message.
  * - Exposes sendMessage, stop, retry, markDone for UI components.
  *
  * Arrow function methods are used throughout to avoid `this` rebinding
@@ -17,7 +19,7 @@ export class ChatStore {
 	// Reactive state ($state runes)
 	// -----------------------------------------------------------------------
 
-	/** All messages in the current conversation (user + assistant + error). */
+	/** All messages in the current conversation (user + assistant + error + synapse). */
 	messages = $state<Message[]>([]);
 
 	/** Current chat lifecycle state. */
@@ -44,6 +46,37 @@ export class ChatStore {
 
 	/** Cancel function returned by animateStreaming. Null when no animation is running. */
 	cancelAnimation: (() => void) | null = null;
+
+	/**
+	 * Tool calls accumulated during the current request.
+	 * Attached to the assistant message when the done event fires, then cleared.
+	 */
+	pendingToolCalls: ToolCall[] = [];
+
+	/**
+	 * ID of the active synapse message in this.messages.
+	 * Used to update the correct message for in-place synapse state mutations.
+	 * Null when no synapse workflow is in progress.
+	 */
+	activeSynapseMessageId: string | null = null;
+
+	// -----------------------------------------------------------------------
+	// Private helpers
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Apply an updater function to the active synapse message's SynapseState.
+	 * Rebuilds the messages array with spread to trigger Svelte 5 reactivity.
+	 * No-op if activeSynapseMessageId is null or the message is not found.
+	 */
+	private updateSynapseMessage = (updater: (state: SynapseState) => SynapseState): void => {
+		if (!this.activeSynapseMessageId) return;
+		const id = this.activeSynapseMessageId;
+		this.messages = this.messages.map((m) => {
+			if (m.id !== id || !m.synapseState) return m;
+			return { ...m, synapseState: updater(m.synapseState) };
+		});
+	};
 
 	// -----------------------------------------------------------------------
 	// Public methods (arrow functions to avoid this-binding issues)
@@ -84,13 +117,115 @@ export class ChatStore {
 					this.currentActivity = `Mode: ${d.mode}`;
 					break;
 
-				case 'tool':
+				case 'tool': {
+					// Filter out find_tool events — these are internal routing events, not
+					// real tool calls. Only call_tool events have meaningful args/results to show.
+					if (d.tool === 'find_tool') break;
+
+					const toolCall: ToolCall = {
+						id: crypto.randomUUID(),
+						tool: typeof d.tool === 'string' ? d.tool : String(d.tool),
+						args: d.args,
+						result: d.result,
+						error: typeof d.error === 'string' ? d.error : undefined,
+						hadError: Boolean(d.hadError),
+						status: d.result !== undefined || d.hadError ? 'done' : 'running',
+						startedAt: Date.now(),
+						// Single-event tools don't expose a start time, so durationMs stays undefined
+						// for 'running' calls and is 0 for instantly-resolved calls.
+						durationMs: d.result !== undefined || d.hadError ? 0 : undefined
+					};
+					this.pendingToolCalls = [...this.pendingToolCalls, toolCall];
 					this.currentActivity = `Using: ${d.tool}`;
 					break;
+				}
 
 				case 'loop':
 					this.currentActivity = 'Thinking...';
 					break;
+
+				case 'synapse_start': {
+					const newMsg: Message = {
+						id: crypto.randomUUID(),
+						role: 'synapse',
+						content: '',
+						timestamp: Date.now(),
+						isStreaming: false,
+						synapseState: {
+							sessionId: typeof d.session_id === 'string' ? d.session_id : '',
+							mode: typeof d.mode === 'string' ? d.mode : '',
+							phase: 'qa',
+							qaCards: [],
+							tasks: []
+						}
+					};
+					this.messages = [...this.messages, newMsg];
+					this.activeSynapseMessageId = newMsg.id;
+					this.currentActivity = 'Synapse: starting...';
+					break;
+				}
+
+				case 'synapse_question': {
+					const areaId = typeof d.area_id === 'string' ? d.area_id : '';
+					const question = typeof d.text === 'string' ? d.text : '';
+					this.updateSynapseMessage((state) => ({
+						...state,
+						qaCards: [...state.qaCards, { areaId, question }]
+					}));
+					this.currentActivity = 'Synapse: asking questions...';
+					break;
+				}
+
+				case 'synapse_answer': {
+					const areaId = typeof d.area_id === 'string' ? d.area_id : '';
+					const answer = typeof d.answer === 'string' ? d.answer : '';
+					this.updateSynapseMessage((state) => ({
+						...state,
+						qaCards: state.qaCards.map((card) =>
+							card.areaId === areaId ? { ...card, answer } : card
+						)
+					}));
+					break;
+				}
+
+				case 'task_start': {
+					const taskId = typeof d.id === 'string' ? d.id : '';
+					const description = typeof d.description === 'string' ? d.description : '';
+					this.updateSynapseMessage((state) => ({
+						...state,
+						phase: state.phase === 'qa' ? 'executing' : state.phase,
+						// Mark any previously running tasks as done before adding the new one.
+						tasks: [
+							...state.tasks.map((t) => (t.status === 'running' ? { ...t, status: 'done' as const } : t)),
+							{ id: taskId, description, status: 'running' as const }
+						]
+					}));
+					this.currentActivity = 'Synapse: executing tasks...';
+					break;
+				}
+
+				case 'task_done': {
+					const taskId = typeof d.id === 'string' ? d.id : '';
+					const responsePreview = typeof d.response === 'string' ? d.response : '';
+					this.updateSynapseMessage((state) => ({
+						...state,
+						tasks: state.tasks.map((t) =>
+							t.id === taskId ? { ...t, status: 'done' as const, responsePreview } : t
+						)
+					}));
+					break;
+				}
+
+				case 'tasks_complete': {
+					const message = typeof d.message === 'string' ? d.message : '';
+					this.updateSynapseMessage((state) => ({
+						...state,
+						phase: 'complete',
+						tasksCompleteMessage: message
+					}));
+					this.currentActivity = 'Synapse: complete';
+					break;
+				}
 
 				case 'done': {
 					this.status = 'streaming';
@@ -98,6 +233,20 @@ export class ChatStore {
 					if (typeof d.session_id === 'string') {
 						this.sessionId = d.session_id;
 					}
+
+					// If a synapse workflow is open but never received tasks_complete, mark it complete now.
+					if (this.activeSynapseMessageId) {
+						this.updateSynapseMessage((state) =>
+							state.phase !== 'complete' ? { ...state, phase: 'complete' } : state
+						);
+					}
+
+					// Attach buffered tool calls to the assistant message, then clear the buffer.
+					const toolCalls =
+						this.pendingToolCalls.length > 0 ? [...this.pendingToolCalls] : undefined;
+					this.pendingToolCalls = [];
+					this.activeSynapseMessageId = null;
+
 					this.messages = [
 						...this.messages,
 						{
@@ -105,7 +254,8 @@ export class ChatStore {
 							role: 'assistant',
 							content: typeof d.response === 'string' ? d.response : '',
 							timestamp: Date.now(),
-							isStreaming: true
+							isStreaming: true,
+							toolCalls
 						}
 					];
 					break;
@@ -150,11 +300,12 @@ export class ChatStore {
 				}
 			];
 		} finally {
-			// The fetch is complete — clear the controller reference.
+			// The fetch is complete — clear the controller reference and pending buffers.
 			// Note: status may be 'loading' (no done event received), 'error',
 			// or 'streaming' (done event received mid-stream before await resolved).
-			// In all cases the controller is spent; clear it unconditionally.
 			this.abortController = null;
+			this.pendingToolCalls = [];
+			this.activeSynapseMessageId = null;
 		}
 	};
 
@@ -171,6 +322,10 @@ export class ChatStore {
 
 		this.cancelAnimation?.();
 		this.cancelAnimation = null;
+
+		// Clear pending buffers.
+		this.pendingToolCalls = [];
+		this.activeSynapseMessageId = null;
 
 		// If an assistant message was mid-animation, mark it as done.
 		if (this.status === 'streaming') {
