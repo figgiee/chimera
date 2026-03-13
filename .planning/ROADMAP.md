@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Static Shell** - SvelteKit scaffolding + Node.js static serving + backend /api/ prefix migration
 - [x] **Phase 2: Core Chat Loop** - Streaming chat experience with markdown, code highlighting, stop/cancel, and error handling
 - [x] **Phase 3: Tool + Synapse Visualization** - Inline tool call display and real-time Synapse workflow progress panel
-- [ ] **Phase 4: Sessions, Health + Knowledge** - Session sidebar, system health bar, and knowledge base management
+- [x] **Phase 4: Sessions, Health + Knowledge** - Session sidebar, system health bar, and knowledge base management
 
 ## Phase Details
 
@@ -85,7 +85,7 @@ Plans:
 - [x] 04-01-PLAN.md — Add backend session endpoints and typed API client layer
 - [x] 04-02-PLAN.md — Build session sidebar and health bar components, wire into page layout
 - [x] 04-03-PLAN.md — Build knowledge management sidebar tab and memory recall indicator
-- [ ] 04-04-PLAN.md — Add last-message preview to session sidebar rows (gap closure)
+- [x] 04-04-PLAN.md — Add last-message preview to session sidebar rows (gap closure)
 
 ## Progress
 
@@ -97,4 +97,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Static Shell | 2/2 | Complete | 2026-03-12 |
 | 2. Core Chat Loop | 3/3 | Complete | 2026-03-12 |
 | 3. Tool + Synapse Visualization | 3/3 | Complete | 2026-03-13 |
-| 4. Sessions, Health + Knowledge | 3/4 | Gap closure | - |
+| 4. Sessions, Health + Knowledge | 4/4 | Complete | 2026-03-13 |

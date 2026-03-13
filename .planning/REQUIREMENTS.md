@@ -36,22 +36,22 @@
 
 ### Session Management
 
-- [ ] **SESS-01**: User sees a sidebar listing their conversations with timestamps and last-message preview
-- [ ] **SESS-02**: User can create a new chat session
-- [ ] **SESS-03**: User can switch between existing sessions
-- [ ] **SESS-04**: User can delete a conversation
+- [x] **SESS-01**: User sees a sidebar listing their conversations with timestamps and last-message preview
+- [x] **SESS-02**: User can create a new chat session
+- [x] **SESS-03**: User can switch between existing sessions
+- [x] **SESS-04**: User can delete a conversation
 
 ### System Health & Identity
 
-- [ ] **HLTH-01**: User sees a status bar showing LM Studio, RAG, and Search health (green/red indicators)
-- [ ] **HLTH-02**: User sees a "Local" privacy badge indicating no data leaves the machine
-- [ ] **HLTH-03**: User sees which model is currently loaded in LM Studio
+- [x] **HLTH-01**: User sees a status bar showing LM Studio, RAG, and Search health (green/red indicators)
+- [x] **HLTH-02**: User sees a "Local" privacy badge indicating no data leaves the machine
+- [x] **HLTH-03**: User sees which model is currently loaded in LM Studio
 
 ### Knowledge Management
 
-- [ ] **KNOW-01**: User can upload documents to the knowledge base via drag-and-drop
-- [ ] **KNOW-02**: User can browse, search, and delete documents in the knowledge base
-- [ ] **KNOW-03**: User sees a subtle indicator when the assistant recalls from conversation memory
+- [x] **KNOW-01**: User can upload documents to the knowledge base via drag-and-drop
+- [x] **KNOW-02**: User can browse, search, and delete documents in the knowledge base
+- [x] **KNOW-03**: User sees a subtle indicator when the assistant recalls from conversation memory
 
 ---
 
@@ -96,23 +96,23 @@
 | CHAT-08 | Phase 2 | Complete |
 | CHAT-09 | Phase 2 | Complete |
 | CHAT-10 | Phase 2 | Complete |
-| TOOL-01 | Phase 3 | Pending |
-| TOOL-02 | Phase 3 | Pending |
-| TOOL-03 | Phase 3 | Pending |
-| SYN-01 | Phase 3 | Pending |
-| SYN-02 | Phase 3 | Pending |
-| SYN-03 | Phase 3 | Pending |
-| SYN-04 | Phase 3 | Pending |
-| SESS-01 | Phase 4 | Pending |
-| SESS-02 | Phase 4 | Pending |
-| SESS-03 | Phase 4 | Pending |
-| SESS-04 | Phase 4 | Pending |
-| HLTH-01 | Phase 4 | Pending |
-| HLTH-02 | Phase 4 | Pending |
-| HLTH-03 | Phase 4 | Pending |
-| KNOW-01 | Phase 4 | Pending |
-| KNOW-02 | Phase 4 | Pending |
-| KNOW-03 | Phase 4 | Pending |
+| TOOL-01 | Phase 3 | Complete |
+| TOOL-02 | Phase 3 | Complete |
+| TOOL-03 | Phase 3 | Complete |
+| SYN-01 | Phase 3 | Complete |
+| SYN-02 | Phase 3 | Complete |
+| SYN-03 | Phase 3 | Complete |
+| SYN-04 | Phase 3 | Complete |
+| SESS-01 | Phase 4 | Complete |
+| SESS-02 | Phase 4 | Complete |
+| SESS-03 | Phase 4 | Complete |
+| SESS-04 | Phase 4 | Complete |
+| HLTH-01 | Phase 4 | Complete |
+| HLTH-02 | Phase 4 | Complete |
+| HLTH-03 | Phase 4 | Complete |
+| KNOW-01 | Phase 4 | Complete |
+| KNOW-02 | Phase 4 | Complete |
+| KNOW-03 | Phase 4 | Complete |
 
 ---
 

@@ -1,36 +1,15 @@
 ---
 phase: 04-sessions-health-knowledge
-verified: 2026-03-13T06:00:42Z
-status: gaps_found
-score: 4/5 must-haves verified
-gaps:
-  - truth: >-
-      User sees a sidebar listing past conversations with timestamps and last-message previews,
-      and can create, switch between, and delete sessions
-    status: partial
-    reason: >-
-      Session rows show a title (first user message truncated to 50 chars) and a relative
-      timestamp but no last-message preview. SessionInfo type has no preview field and the
-      backend does not compute one.
-    artifacts:
-      - path: chimera-chat.js
-        issue: >-
-          Line 225-226: title derived from entry.logs.find (first user_message), not last
-          message. No preview field in the response object.
-      - path: web/src/lib/chat/types.ts
-        issue: >-
-          SessionInfo interface has id, title, created, lastActive, messageCount --
-          no lastMessagePreview field.
-      - path: web/src/lib/components/SessionSidebar.svelte
-        issue: >-
-          Lines 221-222: renders session.title and relativeTime(session.lastActive) only --
-          no second text line for last-message content.
-    missing:
-      - >-
-        Backend chimera-chat.js: compute lastMessagePreview from the last log entry
-        (truncated to ~80 chars)
-      - types.ts: add lastMessagePreview to SessionInfo interface
-      - SessionSidebar.svelte: render lastMessagePreview as a second line in the session row
+verified: 2026-03-12T10:00:00Z
+status: passed
+score: 5/5 must-haves verified
+re_verification:
+  previous_status: gaps_found
+  previous_score: 4/5
+  gaps_closed:
+    - "Each session row in the sidebar shows a last-message preview below the title"
+  gaps_remaining: []
+  regressions: []
 human_verification:
   - test: Drag and drop a file onto the Knowledge sidebar tab
     expected: Upload progress bar appears briefly, then the document appears in the document list
@@ -39,63 +18,64 @@ human_verification:
     expected: A Brain icon appears next to the Assistant label; hovering shows tooltip text
     why_human: Requires live session with populated conversation memory
 ---
+
 # Phase 4: Sessions, Health, and Knowledge -- Verification Report
 
 **Phase Goal:** Users can manage multiple conversations from a sidebar, see system health at a glance, and upload and browse documents in the knowledge base
-**Verified:** 2026-03-13T06:00:42Z
-**Status:** gaps_found (4/5 truths verified, 1 partial)
-**Re-verification:** No -- initial verification
+**Verified:** 2026-03-12T10:00:00Z
+**Status:** passed (5/5 truths verified)
+**Re-verification:** Yes -- after gap closure (04-04 plan)
 
 ## Goal Achievement
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
-|---|-------|--------|----------|| 1 | User sees sidebar with timestamps and last-message previews; can create, switch, delete sessions | PARTIAL | Timestamps present (relativeTime). Title shown (first user message, 50 chars). Last-message preview not present: not in SessionInfo type, not computed in backend, not rendered in sidebar. Create/switch/delete all wired and functional. |
-| 2 | User sees health bar with green/red dots for LM Studio, RAG, Search; model name; Local badge | VERIFIED | HealthBar.svelte: three colored dots, 30s polling, model name from fetchModel(), Shield+Local badge. checkDeps() tests RAG and LM Studio, returns errors[] with matching labels. |
+|---|-------|--------|----------|
+| 1 | User sees sidebar with timestamps and last-message previews; can create, switch, delete sessions | VERIFIED | chimera-chat.js line 229 computes lastMessagePreview from last log entry (80 chars + ellipsis). types.ts line 191 carries the field. SessionSidebar.svelte lines 222-224 render it conditionally in muted text between title and timestamp. |
+| 2 | User sees health bar with green/red dots for LM Studio, RAG, Search; model name; Local badge | VERIFIED | HealthBar.svelte: three colored dots, 30s polling, model name from fetchModel(), Shield+Local badge. |
 | 3 | User can drag and drop documents to upload them | VERIFIED | KnowledgeSidebar.svelte: dragCount counter, ondrop wired, uploadDocument(files[0]) POSTs FormData to RAG_BASE/api/documents/upload. Drop overlay renders during drag. |
 | 4 | User can browse, search, and delete documents in the knowledge base | VERIFIED | KnowledgeSidebar.svelte: fetchDocuments() on mount, client-side filter via searchQuery derived state, inline delete confirmation calling deleteDocument(id). |
 | 5 | User sees a subtle indicator when assistant recalled from conversation memory | VERIFIED | MessageBubble.svelte: hasMemoryRecall derived checks toolCalls for tool === recall_conversation and !hadError. Brain icon with bits-ui Tooltip in assistant name row. |
 
-**Score:** 4/5 truths verified
+**Score:** 5/5 truths verified
+
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| chimera-chat.js | GET /api/sessions + DELETE /api/sessions/:id | VERIFIED | Lines 221-233, 259-267. Sorted session list, correct route ordering. |
-| web/src/lib/chat/api.ts | 7 typed fetch wrappers | VERIFIED | 119 lines. All 7 functions present and typed. fetchHealth/fetchModel never throw. |
-| web/src/lib/chat/types.ts | SessionInfo, HealthStatus, KnowledgeDocument | VERIFIED | All three interfaces defined (lines 185-208). SessionInfo missing lastMessagePreview (gap). |
-| web/src/lib/components/SessionSidebar.svelte | Collapsible sidebar with session list, tabs, create/switch/delete | VERIFIED | 261 lines. Date grouping, inline delete, CSS max-width collapse, KnowledgeSidebar in knowledge tab. |
-| web/src/lib/components/HealthBar.svelte | Three health dots, model name, Local badge, polling | VERIFIED | 114 lines. Three dots green/red, 30s polling, fetchModel display, Local badge with Shield icon. |
-| web/src/lib/components/KnowledgeSidebar.svelte | Drag-and-drop upload, document list, search, delete | VERIFIED | 248 lines. dragCount pattern, drop overlay, hidden file input fallback, progress bar, client-side filter, inline delete. |
-| web/src/lib/components/MessageBubble.svelte | Brain icon tooltip on recall_conversation | VERIFIED | 243 lines. hasMemoryRecall derived at line 141-144. bits-ui Tooltip at lines 173-187. |
-| web/src/lib/chat/ChatStore.svelte.ts | resetSession() and loadSession() | VERIFIED | resetSession at line 399 aborts in-flight request, clears all state. loadSession at line 422 wraps resetSession. |
-| web/src/routes/+page.svelte | SessionSidebar and HealthBar wired into layout | VERIFIED | 36 lines. Both imported and rendered unconditionally in correct positions. |
+| `chimera-chat.js` | GET /api/sessions with lastMessagePreview | VERIFIED | Lines 228-230: lastLog computed from entry.logs, truncated to 80 chars, pushed into session object. |
+| `web/src/lib/chat/types.ts` | SessionInfo with lastMessagePreview field | VERIFIED | Line 191: lastMessagePreview: string added to SessionInfo interface. |
+| `web/src/lib/components/SessionSidebar.svelte` | Three-line session row: title / preview / timestamp | VERIFIED | 264 lines. Lines 222-224: conditional preview span in muted/70 style. |
+| `web/src/lib/components/HealthBar.svelte` | Three health dots, model name, Local badge, polling | VERIFIED | 114 lines. Three dots green/red, 30s polling, fetchModel display, Local badge with Shield icon. |
+| `web/src/lib/components/KnowledgeSidebar.svelte` | Drag-and-drop upload, document list, search, delete | VERIFIED | 248 lines. dragCount pattern, drop overlay, hidden file input fallback, progress bar, client-side filter, inline delete. |
+| `web/src/lib/components/MessageBubble.svelte` | Brain icon tooltip on recall_conversation | VERIFIED | 243 lines. hasMemoryRecall derived at line 141-144. Tooltip at lines 172-176. |
+| `web/src/routes/+page.svelte` | SessionSidebar and HealthBar wired into layout | VERIFIED | 36 lines. Both imported at lines 7-8 and rendered at lines 13 and 18. |
+
 ### Key Link Verification
 
 | From | To | Via | Status |
 |------|----|-----|--------|
+| chimera-chat.js | lastMessagePreview in SessionInfo | Last log entry text truncated at 80 chars | WIRED |
+| SessionSidebar.svelte | session.lastMessagePreview | Conditional span render lines 222-224 | WIRED |
 | SessionSidebar | GET /api/sessions | fetchSessions() in effect, 30s poll | WIRED |
 | SessionSidebar | DELETE /api/sessions/:id | deleteSession(id) in handleConfirmDelete | WIRED |
-| SessionSidebar | ChatStore.resetSession()/loadSession() | Direct import, handleNewChat/handleSwitchSession | WIRED |
 | HealthBar | GET /api/health?deep=true | fetchHealth() in effect refresh(), 30s poll | WIRED |
-| HealthBar | LM Studio /v1/models | fetchModel() in refresh() | WIRED |
-| KnowledgeSidebar | GET RAG /api/documents | fetchDocuments() in effect on mount | WIRED |
+| KnowledgeSidebar | GET RAG /api/documents | fetchDocuments() on mount | WIRED |
 | KnowledgeSidebar | POST RAG /api/documents/upload | uploadDocument(file) in handleFiles | WIRED |
 | KnowledgeSidebar | DELETE RAG /api/documents/:id | deleteDocument(id) in handleConfirmDelete | WIRED |
-| SessionSidebar | KnowledgeSidebar | Renders inside knowledge tab block | WIRED |
 | MessageBubble | toolCalls recall_conversation | hasMemoryRecall derived reads message.toolCalls | WIRED |
-| chimera-chat.js /api/health | LM Studio + RAG via checkDeps() | Fetches both services, pushes named error strings | WIRED |
+
 ### Requirements Coverage
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
 | SESS-01 (create sessions) | SATISFIED | New chat button calls chatStore.resetSession() with new UUID |
-| SESS-02 (list sessions) | PARTIAL | List present with timestamps; title shown but no last-message preview |
+| SESS-02 (list sessions with previews) | SATISFIED | List with timestamps, titles, and lastMessagePreview text |
 | SESS-03 (switch sessions) | SATISFIED | loadSession(id) delegates to resetSession with existing ID |
 | SESS-04 (delete sessions) | SATISFIED | DELETE /api/sessions/:id backend + inline confirmation UI |
 | HLTH-01 (LM Studio health) | SATISFIED | Green/red dot, checkDeps() tests LM Studio endpoint |
-| HLTH-02 (RAG/Search health) | SATISFIED | Two separate dots, both derived from RAG errors[] signal |
+| HLTH-02 (RAG/Search health) | SATISFIED | Two separate dots derived from RAG errors[] signal |
 | HLTH-03 (model name + Local badge) | SATISFIED | fetchModel() displayed, Shield+Local badge |
 | KNOW-01 (drag-and-drop upload) | SATISFIED | dragCount pattern, ondrop wired, uploadDocument() called |
 | KNOW-02 (browse, search, delete) | SATISFIED | Document list on mount, client-side search, inline delete |
@@ -104,6 +84,7 @@ human_verification:
 ### Anti-Patterns Found
 
 No TODO/FIXME/placeholder/stub patterns found in any phase 4 component or API file. All event handlers contain real API calls. All state variables are rendered in their component templates.
+
 ### Human Verification Required
 
 #### 1. Drag-and-Drop Document Upload
@@ -120,11 +101,9 @@ No TODO/FIXME/placeholder/stub patterns found in any phase 4 component or API fi
 
 ### Gaps Summary
 
-One gap prevents full success criterion achievement:
-
-**Last-message previews (Truth 1 / SESS-02):** The sidebar lists sessions with relative timestamps and a title derived from the first user message. The success criterion specifies last-message previews -- a snippet of the most recent exchange visible in the session row. The backend GET /api/sessions computes title from the first log entry matching type=user_message. The SessionInfo type carries no preview field. The sidebar renders only session.title and relativeTime(session.lastActive). Three targeted changes close this gap: (1) add preview computation to the backend using the last log entry, (2) add lastMessagePreview to SessionInfo, (3) render it in the session row below the title.
+All gaps from the initial verification have been closed. The one partial truth (SESS-02, last-message preview) is now fully satisfied by three surgical edits across chimera-chat.js, types.ts, and SessionSidebar.svelte. No regressions were found in the four previously-passing truths.
 
 ---
 
-_Verified: 2026-03-13T06:00:42Z_
+_Verified: 2026-03-12T10:00:00Z_
 _Verifier: Claude (gsd-verifier)_
