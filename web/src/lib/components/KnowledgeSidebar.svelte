@@ -12,6 +12,8 @@
 	let dragCount = $state(0);
 	let uploading = $state(false);
 	let deletingId = $state<string | null>(null);
+	let loadError = $state(false);
+	let uploadError = $state<string | null>(null);
 
 	const isDragging = $derived(dragCount > 0);
 
@@ -30,8 +32,9 @@
 	async function loadDocuments(): Promise<void> {
 		try {
 			documents = await fetchDocuments();
+			loadError = false;
 		} catch {
-			// Silent fail — show previous state
+			loadError = true;
 		}
 	}
 
@@ -57,12 +60,12 @@
 	async function handleFiles(files: File[]): Promise<void> {
 		if (files.length === 0) return;
 		uploading = true;
+		uploadError = null;
 		try {
-			// Upload first file only for v1
 			await uploadDocument(files[0]);
 			await loadDocuments();
-		} catch {
-			// Silent fail — document list may not show new file
+		} catch (e) {
+			uploadError = e instanceof Error ? e.message : 'Upload failed';
 		} finally {
 			uploading = false;
 		}
@@ -165,10 +168,21 @@
 		/>
 	</div>
 
-	<!-- Upload progress bar -->
+	<!-- Upload progress / error -->
 	{#if uploading}
 		<div class="mx-3 mb-1 h-0.5 rounded overflow-hidden bg-muted shrink-0">
 			<div class="h-full bg-primary/50 animate-pulse w-full"></div>
+		</div>
+	{:else if uploadError}
+		<div class="mx-3 mb-1 flex items-center gap-2 rounded bg-destructive/10 px-2 py-1 text-xs text-destructive shrink-0">
+			<span class="flex-1 truncate">{uploadError}</span>
+			<button onclick={() => (uploadError = null)} aria-label="Dismiss error"><X size={10} /></button>
+		</div>
+	{/if}
+	{#if loadError}
+		<div class="mx-3 mb-1 flex items-center gap-2 rounded bg-destructive/10 px-2 py-1 text-xs text-destructive shrink-0">
+			<span class="flex-1">Failed to load</span>
+			<button onclick={loadDocuments} class="underline hover:no-underline">Retry</button>
 		</div>
 	{/if}
 

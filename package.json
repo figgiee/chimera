@@ -1,0 +1,13 @@
+{
+  "name": "chimera",
+  "version": "0.1.0",
+  "description": "Fully local AI assistant with agentic tools, RAG, and web search",
+  "main": "chimera-chat.js",
+  "scripts": {
+    "start": "node chimera-chat.js",
+    "test": "node tests/run_tests.js"
+  },
+  "keywords": ["ai", "local-ai", "rag", "llm", "mcp", "agentic"],
+  "author": "Chimera",
+  "license": "MIT"
+}

@@ -1,10 +1,13 @@
 <script lang="ts">
-	import { Workflow, CheckCircle2 } from 'lucide-svelte';
+	import { Workflow, CheckCircle2, Square } from 'lucide-svelte';
 	import type { SynapseState, SynapsePhase } from '$lib/chat/types.js';
+	import { chatStore } from '$lib/chat/ChatStore.svelte.js';
 	import QACard from './QACard.svelte';
 	import TaskChecklist from './TaskChecklist.svelte';
 
 	let { synapseState }: { synapseState: SynapseState } = $props();
+
+	const isActive = $derived(synapseState.phase !== 'complete');
 
 	const phases: { id: SynapsePhase; label: string }[] = [
 		{ id: 'qa', label: 'Q&A' },
@@ -27,6 +30,16 @@
 			<span class="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
 				{synapseState.mode}
 			</span>
+			{#if isActive}
+				<button
+					onclick={() => chatStore.stop()}
+					aria-label="Cancel workflow"
+					class="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+				>
+					<Square size={12} fill="currentColor" />
+					Cancel
+				</button>
+			{/if}
 		</div>
 
 		<!-- Phase indicator -->

@@ -3,8 +3,8 @@
 //
 // POST /api/chat   { message, session_id?, project_id?, working_dir? }
 // GET  /api/health
-// GET  /api/sessions/:id/stats
 // GET  /api/sessions/:id/logs
+// *    /api/rag/*   (proxied to RAG stack)
 //
 // Non-API routes serve static files from web/build (SPA fallback).
 //
@@ -15,7 +15,10 @@
 const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
+const { randomUUID } = require('node:crypto');
 const { ChimeraSession } = require('./chimera-orchestrator');
+
+const CHIMERA_DIR = __dirname.replace(/\\/g, '/');
 
 const PORT = parseInt(process.env.CHIMERA_PORT || '3210');
 const HOST = process.env.CHIMERA_HOST || '127.0.0.1';
@@ -41,7 +44,62 @@ const MIME_TYPES = {
 // ─── Session store ───────────────────────────────────────────────
 const sessions = new Map();  // session_id → { session, created, lastActive, logs }
 const MAX_SESSIONS = 20;
-const SESSION_TTL = 2 * 60 * 60 * 1000; // 2 hours
+const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days (persisted to disk)
+
+// ─── Session persistence ─────────────────────────────────────────
+const SESSIONS_DIR = path.join(__dirname, 'sessions');
+fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+
+function persistSession(sessionId) {
+  const entry = sessions.get(sessionId);
+  if (!entry) return;
+  try {
+    const data = {
+      created: entry.created,
+      lastActive: entry.lastActive,
+      projectId: entry.session.projectId,
+      logs: entry.logs,
+      messages: entry.session.messages,
+    };
+    fs.writeFileSync(path.join(SESSIONS_DIR, `${sessionId}.json`), JSON.stringify(data));
+  } catch (e) {
+    console.error(`[persist] failed to save session ${sessionId}:`, e.message);
+  }
+}
+
+function loadPersistedSessions() {
+  try {
+    const files = fs.readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.json'));
+    const now = Date.now();
+    let loaded = 0;
+    for (const file of files) {
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, file), 'utf-8'));
+        if (now - data.lastActive > SESSION_TTL) {
+          fs.unlinkSync(path.join(SESSIONS_DIR, file));
+          continue;
+        }
+        const sessionId = file.replace('.json', '');
+        const logs = data.logs || [];
+        const session = new ChimeraSession({
+          projectId: data.projectId || 'chimera',
+          onEvent: (event) => {
+            logs.push({ ts: Date.now(), ...event });
+            if (logs.length > 200) logs.splice(0, logs.length - 100);
+          }
+        });
+        // Restore LLM message history
+        if (Array.isArray(data.messages)) session.messages = data.messages;
+        sessions.set(sessionId, { session, created: data.created, lastActive: data.lastActive, logs });
+        loaded++;
+      } catch {
+        // Delete corrupt/unreadable session files so they don't accumulate
+        try { fs.unlinkSync(path.join(SESSIONS_DIR, file)); } catch {}
+      }
+    }
+    if (loaded > 0) console.log(`  Sessions:  restored ${loaded} session(s) from disk`);
+  } catch { /* sessions dir missing or unreadable */ }
+}
 
 function getOrCreateSession(sessionId, projectId) {
   // Prune expired sessions
@@ -112,6 +170,9 @@ function logEvent(sessionId, event) {
     case 'task_done':
       console.log(`[${ts}] [${sessionId}] DONE: task ${event.id}`);
       break;
+    case 'task_failed':
+      console.log(`[${ts}] [${sessionId}] FAILED: task ${event.id} — ${event.error}`);
+      break;
     case 'tasks_complete':
       console.log(`[${ts}] [${sessionId}] ALL TASKS: ${event.count} completed`);
       break;
@@ -137,14 +198,23 @@ function readBody(req) {
   });
 }
 
+// Only allow CORS from localhost origins — prevents malicious websites from
+// accessing Chimera's API even if CHIMERA_HOST is misconfigured to 0.0.0.0.
+// Called once at the top of handleRequest to set headers on every response.
+function applyCors(req, res) {
+  const origin = req.headers.origin || '';
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(body),
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(body);
 }
@@ -184,12 +254,16 @@ function serveStatic(req, res, pathname) {
       const ext = path.extname(filePath);
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
       res.writeHead(200, { 'Content-Type': contentType });
-      fs.createReadStream(filePath).pipe(res);
+      const stream = fs.createReadStream(filePath);
+      stream.on('error', () => { if (!res.writableEnded) { res.writeHead(500); res.end(); } });
+      stream.pipe(res);
     } else {
       // SPA fallback — serve 200.html
       const fallback = path.resolve(STATIC_DIR, '200.html');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      fs.createReadStream(fallback).pipe(res);
+      const stream = fs.createReadStream(fallback);
+      stream.on('error', () => { if (!res.writableEnded) { res.writeHead(404); res.end(); } });
+      stream.pipe(res);
     }
   });
 }
@@ -200,16 +274,21 @@ const activeLocks = new Set(); // prevent concurrent requests per session
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
 
+  // Apply CORS headers to every response (localhost origins only)
+  applyCors(req, res);
+
   // CORS preflight
   if (req.method === 'OPTIONS') {
-    sendJson(res, 204, {});
+    res.writeHead(204);
+    res.end();
     return;
   }
 
   // GET /api/health
   if (req.method === 'GET' && url.pathname === '/api/health') {
     const deep = url.searchParams.get('deep') === 'true';
-    const result = { status: 'ok', sessions: sessions.size, uptime: Math.floor(process.uptime()) };
+    const lmUrl = `http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}`;
+    const result = { status: 'ok', version: '0.1.0', sessions: sessions.size, uptime: Math.floor(process.uptime()), lmUrl };
     if (deep) {
       const errors = await checkDeps();
       if (errors.length) { result.status = 'degraded'; result.errors = errors; }
@@ -234,20 +313,6 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // GET /api/sessions/:id/stats
-  const statsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stats$/);
-  if (req.method === 'GET' && statsMatch) {
-    const entry = sessions.get(statsMatch[1]);
-    if (!entry) { sendJson(res, 404, { error: 'Session not found' }); return; }
-    sendJson(res, 200, {
-      ...entry.session.getStats(),
-      created: entry.created,
-      lastActive: entry.lastActive,
-      logCount: entry.logs.length,
-    });
-    return;
-  }
-
   // GET /api/sessions/:id/logs
   const logsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/logs$/);
   if (req.method === 'GET' && logsMatch) {
@@ -264,6 +329,7 @@ async function handleRequest(req, res) {
     const id = deleteSessionMatch[1];
     if (!sessions.has(id)) { sendJson(res, 404, { error: 'Session not found' }); return; }
     sessions.delete(id);
+    try { fs.unlinkSync(path.join(SESSIONS_DIR, `${id}.json`)); } catch {}
     sendJson(res, 200, { status: 'deleted', session_id: id });
     return;
   }
@@ -279,7 +345,7 @@ async function handleRequest(req, res) {
       return;
     }
 
-    const sid = session_id || `default-${Date.now()}`;
+    const sid = session_id || `default-${randomUUID()}`;
     if (activeLocks.has(sid)) {
       sendJson(res, 429, { error: 'Session is busy.' });
       return;
@@ -290,7 +356,6 @@ async function handleRequest(req, res) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
     });
 
     activeLocks.add(sid);
@@ -305,7 +370,8 @@ async function handleRequest(req, res) {
 
     try {
       // Create session with SSE-aware event handler
-      const { session } = getOrCreateSession(sid, project_id);
+      const entry = getOrCreateSession(sid, project_id);
+      const { session } = entry;
       const originalOnEvent = session.onEvent;
       session.onEvent = (event) => {
         originalOnEvent(event);
@@ -314,18 +380,25 @@ async function handleRequest(req, res) {
       session.signal = abort.signal;
 
       const response = await session.processMessage(message, {
-        workingDir: working_dir || 'C:/Users/sandv/Desktop/chimera'
+        workingDir: working_dir || CHIMERA_DIR
       });
 
       // Restore original handler
       session.onEvent = originalOnEvent;
 
       if (!abort.signal.aborted && !res.writableEnded) {
-        sendSSE(res, 'done', { response, session_id: sid, stats: session.getStats() });
+        // Log the done event so session history hydration can reconstruct assistant messages
+        const doneEvent = { type: 'done', response, session_id: sid, stats: session.getStats() };
+        entry.logs.push({ ts: Date.now(), ...doneEvent });
+        persistSession(sid);
+        sendSSE(res, 'done', doneEvent);
         res.end();
       }
     } catch (e) {
       if (!res.writableEnded) {
+        // Log the error event for session history hydration
+        const entry = sessions.get(sid);
+        if (entry) entry.logs.push({ ts: Date.now(), type: 'error', error: e.message });
         sendSSE(res, 'error', { error: e.message });
         res.end();
       }
@@ -347,7 +420,7 @@ async function handleRequest(req, res) {
       return;
     }
 
-    const sid = session_id || `default-${Date.now()}`;
+    const sid = session_id || `default-${randomUUID()}`;
 
     // Prevent concurrent requests for the same session
     if (activeLocks.has(sid)) {
@@ -369,16 +442,21 @@ async function handleRequest(req, res) {
     }, 5 * 60 * 1000);
 
     try {
-      const { session } = getOrCreateSession(sid, project_id);
+      const entry = getOrCreateSession(sid, project_id);
+      const { session } = entry;
       session.signal = abort.signal; // orchestrator checks this
       const response = await session.processMessage(message, {
-        workingDir: working_dir || 'C:/Users/sandv/Desktop/chimera'
+        workingDir: working_dir || CHIMERA_DIR
       });
 
       if (abort.signal.aborted) {
         console.log(`[${new Date().toISOString().slice(11,19)}] [${sid}] CANCELLED by client disconnect`);
         return;
       }
+
+      // Log the done event for session history hydration
+      entry.logs.push({ ts: Date.now(), type: 'done', response, session_id: sid, stats: session.getStats() });
+      persistSession(sid);
 
       sendJson(res, 200, {
         response,
@@ -390,11 +468,50 @@ async function handleRequest(req, res) {
         console.log(`[${new Date().toISOString().slice(11,19)}] [${sid}] CANCELLED by client disconnect`);
         return;
       }
+      // Log the error event for session history hydration
+      const entry = sessions.get(sid);
+      if (entry) entry.logs.push({ ts: Date.now(), type: 'error', error: e.message });
       console.error(`[ERROR] ${sid}:`, e.message);
       sendJson(res, 500, { error: e.message });
     } finally {
       clearTimeout(timeout);
       activeLocks.delete(sid);
+    }
+    return;
+  }
+
+  // ─── RAG proxy — forwards /api/rag/* to the RAG stack ──────────
+  const RAG_URL = process.env.RAG_URL || 'http://localhost:8080';
+
+  if (url.pathname.startsWith('/api/rag/')) {
+    const ragPath = url.pathname.replace('/api/rag', '/api');
+    const ragUrl = `${RAG_URL}${ragPath}${url.search}`;
+
+    try {
+      const headers = {};
+      if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
+
+      // Collect request body for POST/PUT/DELETE
+      let body = null;
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        body = Buffer.concat(chunks);
+      }
+
+      const upstream = await fetch(ragUrl, {
+        method: req.method,
+        headers,
+        body,
+      });
+
+      const responseBody = await upstream.arrayBuffer();
+      res.writeHead(upstream.status, {
+        'Content-Type': upstream.headers.get('content-type') || 'application/json',
+      });
+      res.end(Buffer.from(responseBody));
+    } catch (e) {
+      sendJson(res, 502, { error: `RAG proxy error: ${e.message}` });
     }
     return;
   }
@@ -405,6 +522,8 @@ async function handleRequest(req, res) {
 
 // ─── Server ──────────────────────────────────────────────────────
 const server = http.createServer(handleRequest);
+
+loadPersistedSessions();
 
 server.listen(PORT, HOST, () => {
   console.log(`\n  Chimera Chat Server`);
@@ -417,8 +536,14 @@ server.listen(PORT, HOST, () => {
   console.log(`  GET  /api/health       ?deep=true to check dependencies`);
   console.log(`  GET  /api/sessions             List all sessions (sorted by lastActive)`);
   console.log(`  DELETE /api/sessions/:id       Delete a session`);
-  console.log(`  GET  /api/sessions/:id/stats`);
-  console.log(`  GET  /api/sessions/:id/logs\n`);
+  console.log(`  GET  /api/sessions/:id/logs`);
+  console.log(`  *    /api/rag/*            Proxied to RAG stack\n`);
+
+  // Warn if exposed beyond localhost — Chimera has no authentication
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+    console.warn(`  ⚠  WARNING: CHIMERA_HOST=${HOST} — server is exposed beyond localhost.`);
+    console.warn(`     Chimera has no authentication. Do not expose on a public network.\n`);
+  }
 });
 
 server.on('error', (e) => {

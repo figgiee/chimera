@@ -1,15 +1,14 @@
 /**
  * Typed fetch wrappers for all Phase 4 API calls.
  *
- * Sessions and health endpoints are served by chimera-chat.js (same origin).
- * Document endpoints are served by the RAG stack at RAG_BASE.
+ * Sessions, health, and document endpoints are served by chimera-chat.js (same origin).
+ * Document requests are proxied through /api/rag/* to the RAG stack.
  * LM Studio model info is fetched directly from LM_BASE.
  */
 
 import type { SessionInfo, HealthStatus, KnowledgeDocument, Message, ToolCall, SynapseState } from './types.js';
 
-const RAG_BASE = 'http://localhost:8080';
-const LM_BASE = 'http://127.0.0.1:1235';
+// LM Studio URL is served by the backend via /api/health — do not hardcode here
 
 // ---------------------------------------------------------------------------
 // Sessions  (chimera-chat.js, same origin)
@@ -80,7 +79,7 @@ export function logsToMessages(logs: Record<string, unknown>[]): Message[] {
           result: log.result,
           error: typeof log.error === 'string' ? log.error : undefined,
           hadError: Boolean(log.hadError),
-          status: log.result !== undefined || log.hadError ? 'done' : 'error',
+          status: log.hadError ? 'error' : 'done',
           startedAt: ts,
           durationMs: 0
         };
@@ -191,6 +190,18 @@ export function logsToMessages(logs: Record<string, unknown>[]): Message[] {
         break;
       }
 
+      case 'task_failed': {
+        const taskId = typeof log.id === 'string' ? log.id : '';
+        const errorMsg = typeof log.error === 'string' ? log.error : 'Task failed';
+        updateSynapse((state) => ({
+          ...state,
+          tasks: state.tasks.map((t) =>
+            t.id === taskId ? { ...t, status: 'failed' as const, responsePreview: errorMsg } : t
+          )
+        }));
+        break;
+      }
+
       case 'tasks_complete': {
         const message = typeof log.message === 'string' ? log.message : '';
         updateSynapse((state) => ({
@@ -255,12 +266,17 @@ export async function fetchHealth(): Promise<HealthStatus> {
 }
 
 /**
- * Fetch the currently loaded model name from LM Studio.
+ * Fetch the currently loaded model name from LM Studio via the backend health endpoint.
+ * Uses /api/health to get the LM Studio URL so the port is never hardcoded in the frontend.
  * Returns 'Unknown' on any failure — never throws.
  */
 export async function fetchModel(): Promise<string> {
   try {
-    const res = await fetch(`${LM_BASE}/v1/models`);
+    const health = await fetch('/api/health');
+    if (!health.ok) return 'Unknown';
+    const { lmUrl } = await health.json() as { lmUrl?: string };
+    if (!lmUrl) return 'Unknown';
+    const res = await fetch(`${lmUrl}/v1/models`);
     if (!res.ok) return 'Unknown';
     const data = await res.json() as { data?: Array<{ id: string }> };
     return data.data?.[0]?.id ?? 'Unknown';
@@ -270,7 +286,7 @@ export async function fetchModel(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Documents  (RAG server at RAG_BASE — not proxied through chimera-chat.js)
+// Documents  (proxied through chimera-chat.js at /api/rag/*)
 // ---------------------------------------------------------------------------
 
 /**
@@ -278,7 +294,7 @@ export async function fetchModel(): Promise<string> {
  * Throws if the request fails.
  */
 export async function fetchDocuments(): Promise<KnowledgeDocument[]> {
-  const res = await fetch(`${RAG_BASE}/api/documents`);
+  const res = await fetch('/api/rag/documents');
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
@@ -291,7 +307,7 @@ export async function fetchDocuments(): Promise<KnowledgeDocument[]> {
  * Throws if the document is not found or request fails.
  */
 export async function deleteDocument(id: string): Promise<void> {
-  const res = await fetch(`${RAG_BASE}/api/documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const res = await fetch(`/api/rag/documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
@@ -306,7 +322,7 @@ export async function deleteDocument(id: string): Promise<void> {
 export async function uploadDocument(file: File): Promise<void> {
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(`${RAG_BASE}/api/documents/upload`, { method: 'POST', body: form });
+  const res = await fetch('/api/rag/documents/upload', { method: 'POST', body: form });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);

@@ -161,21 +161,11 @@ export type SSEEventMap = {
   task_start: { id: string; description: string };
   /** A Synapse task has completed. */
   task_done: { id: string; response: string };
+  /** A Synapse task has failed. */
+  task_failed: { id: string; error: string };
   /** All Synapse tasks have completed. */
   tasks_complete: { count: number; message: string };
 };
-
-// ---------------------------------------------------------------------------
-// Send options
-// ---------------------------------------------------------------------------
-
-/** Options passed to the chat send flow. */
-export interface SendMessageOptions {
-  /** The user's message text. */
-  message: string;
-  /** Optional session ID to continue an existing conversation. */
-  sessionId?: string;
-}
 
 // ---------------------------------------------------------------------------
 // Phase 4: Session, Health, Document, and Model types

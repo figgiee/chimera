@@ -34,6 +34,13 @@ build/
 # Chimera workspace (orchestrator state, logs)
 .chimera/
 
+# Session persistence — contains full conversation history, never commit
+sessions/
+
+# RAG documents — may contain sensitive user files
+rag-setup/documents/
+!rag-setup/documents/.gitkeep
+
 # External MCP repos (cloned separately)
 mcp-pdf-reader/
 mcp-screenshot/

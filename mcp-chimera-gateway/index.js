@@ -7,11 +7,14 @@ const {
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { execSync } = require("node:child_process");
 
 const RAG_URL = process.env.RAG_SERVER_URL || "http://localhost:8080";
 const SEARXNG_URL = process.env.SEARXNG_URL || "http://localhost:8888";
-const ALLOWED_DIRS = (process.env.ALLOWED_DIRS || "C:/Users/sandv/Desktop,C:/Users/sandv/Documents,C:/Users/sandv/Downloads").split(",");
+const _home = os.homedir().replace(/\\/g, '/');
+const CMD_TIMEOUT = parseInt(process.env.CHIMERA_CMD_TIMEOUT || "30000");
+const ALLOWED_DIRS = (process.env.ALLOWED_DIRS || `${_home}/Desktop,${_home}/Documents,${_home}/Downloads`).split(",");
 
 const agent = new http.Agent({ keepAlive: true, maxSockets: 10 });
 
@@ -124,7 +127,11 @@ async function httpJSON(url, options = {}) {
 // ─── Path security ───────────────────────────────────────────────
 function isPathAllowed(filePath) {
   const resolved = path.resolve(filePath);
-  return ALLOWED_DIRS.some(dir => resolved.startsWith(path.resolve(dir)));
+  return ALLOWED_DIRS.some(dir => {
+    const base = path.resolve(dir);
+    const rel = path.relative(base, resolved);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  });
 }
 
 // ─── Security: sensitive file blocklist ──────────────────────────
@@ -150,9 +157,10 @@ const COMMAND_ALLOWLIST = [
 ];
 
 function isCommandAllowed(command) {
-  // Extract the first word (the binary being invoked)
-  const first = command.trim().split(/[\s|;&]/)[0].replace(/^['"]|['"]$/g, "");
-  const bin = path.basename(first).toLowerCase().replace(/\.exe$/, "").replace(/\.cmd$/, "");
+  // Block shell chaining, injection, Windows metacharacters, and file redirection
+  if (/[|;&`$()%^!><]/.test(command)) return false;
+  const first = command.trim().split(/\s+/)[0].replace(/^['"]|['"]$/g, "");
+  const bin = path.basename(first).toLowerCase().replace(/\.(exe|cmd|bat)$/, "");
   return COMMAND_ALLOWLIST.includes(bin);
 }
 
@@ -344,13 +352,15 @@ async function executeTool(name, args) {
 
     case "run_command": {
       if (!args.command) throw new Error("command is required");
-      const cwd = args.cwd || "C:/Users/sandv/Desktop";
+      const cwd = args.cwd || `${_home}/Desktop`;
       if (!isPathAllowed(cwd)) throw new Error(`Access denied: ${cwd}`);
       if (!isCommandAllowed(args.command)) throw new Error(`Command not allowed: "${args.command.split(/\s/)[0]}". Allowed: ${COMMAND_ALLOWLIST.slice(0, 10).join(", ")}...`);
+      // Auto-create cwd if missing — prevents ENOENT when model runs commands in new project dirs
+      fs.mkdirSync(cwd, { recursive: true });
       try {
         const output = execSync(args.command, {
           cwd,
-          timeout: 30000,
+          timeout: CMD_TIMEOUT,
           maxBuffer: 1024 * 512,
           encoding: "utf-8",
           shell: true,

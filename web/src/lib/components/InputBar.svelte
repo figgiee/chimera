@@ -70,6 +70,7 @@
 			bind:value={inputText}
 			onkeydown={handleKeydown}
 			placeholder="Message Chimera..."
+			aria-label="Message input"
 			rows={1}
 			class="chat-input-textarea flex-1 resize-none overflow-y-auto rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
 			style="min-height: 44px; max-height: 200px;"

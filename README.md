@@ -513,16 +513,16 @@ cd rag-setup
 
 <br>
 
-## Hardware
+## Hardware Requirements
 
-Tested and optimized on:
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
+| **RAM** | 16 GB | 32 GB+ |
+| **GPU VRAM** | 8 GB | 16 GB+ |
+| **OS** | Windows 10, macOS 12, or Linux | — |
+| **Software** | Docker Desktop, LM Studio, Node.js 20+ | — |
 
-| Component | Spec |
-|-----------|------|
-| **CPU** | 16 cores / 32 threads |
-| **RAM** | 64 GB DDR5 |
-| **GPU** | NVIDIA RTX 5070 Ti (16 GB VRAM) |
-| **OS** | Windows 11 Pro |
+Chimera runs fully locally — no cloud, no API keys required. Performance depends on the model you load in LM Studio.
 
 <p align="right"><a href="#readme-top">back to top</a></p>
 

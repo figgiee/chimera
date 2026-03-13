@@ -217,6 +217,18 @@ export class ChatStore {
 					break;
 				}
 
+				case 'task_failed': {
+					const taskId = typeof d.id === 'string' ? d.id : '';
+					const errorMsg = typeof d.error === 'string' ? d.error : 'Task failed';
+					this.updateSynapseMessage((state) => ({
+						...state,
+						tasks: state.tasks.map((t) =>
+							t.id === taskId ? { ...t, status: 'failed' as const, responsePreview: errorMsg } : t
+						)
+					}));
+					break;
+				}
+
 				case 'tasks_complete': {
 					const message = typeof d.message === 'string' ? d.message : '';
 					this.updateSynapseMessage((state) => ({

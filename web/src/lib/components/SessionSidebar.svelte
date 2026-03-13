@@ -13,6 +13,9 @@
 	let sessions = $state<SessionInfo[]>([]);
 	let deletingId = $state<string | null>(null);
 	let activeTab = $state<'sessions' | 'knowledge'>('sessions');
+	let switching = $state(false);
+	let loadError = $state(false);
+	let errorRetryDelay = 30_000; // starts at 30s, backs off on repeated failures
 
 	// ---------------------------------------------------------------------------
 	// Session grouping helpers
@@ -80,15 +83,25 @@
 	async function loadSessions(): Promise<void> {
 		try {
 			sessions = await fetchSessions();
+			loadError = false;
+			errorRetryDelay = 30_000; // reset backoff on success
 		} catch {
-			// Silent fail — sidebar stays showing previous sessions
+			loadError = true;
+			errorRetryDelay = Math.min(errorRetryDelay * 2, 300_000); // cap at 5 min
 		}
 	}
 
 	$effect(() => {
 		loadSessions();
-		const interval = setInterval(loadSessions, 30_000);
-		return () => clearInterval(interval);
+		let timer: ReturnType<typeof setTimeout>;
+		function schedule() {
+			timer = setTimeout(async () => {
+				await loadSessions();
+				schedule();
+			}, errorRetryDelay);
+		}
+		schedule();
+		return () => clearTimeout(timer);
 	});
 
 	// ---------------------------------------------------------------------------
@@ -101,8 +114,13 @@
 	}
 
 	async function handleSwitchSession(session: SessionInfo): Promise<void> {
-		if (deletingId === session.id) return; // ignore click on delete-confirm row
-		await chatStore.loadSession(session.id);
+		if (deletingId === session.id || switching) return;
+		switching = true;
+		try {
+			await chatStore.loadSession(session.id);
+		} finally {
+			switching = false;
+		}
 	}
 
 	async function handleConfirmDelete(id: string): Promise<void> {
@@ -179,7 +197,13 @@
 		{#if activeTab === 'sessions'}
 			<!-- Session list -->
 			<div class="flex-1 overflow-y-auto py-1">
-				{#if sessionGroups.length === 0}
+				{#if loadError}
+					<div class="mx-3 my-2 flex items-center gap-2 rounded bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+						<span class="flex-1">Failed to load sessions</span>
+						<button onclick={loadSessions} class="underline hover:no-underline">Retry</button>
+					</div>
+				{/if}
+				{#if sessionGroups.length === 0 && !loadError}
 					<p class="px-3 py-4 text-xs text-muted-foreground">No sessions yet</p>
 				{:else}
 					{#each sessionGroups as group (group.label)}
@@ -214,9 +238,10 @@
 									<div class="group mx-2 mb-0.5 relative">
 										<button
 											onclick={() => handleSwitchSession(session)}
+											disabled={switching}
 											class="w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex flex-col gap-0.5 {isActive
 												? 'bg-accent text-foreground'
-												: 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+												: 'text-muted-foreground hover:bg-accent hover:text-foreground'} disabled:opacity-50 disabled:cursor-wait"
 										>
 											<span class="truncate font-medium text-foreground leading-tight">{session.title}</span>
 											{#if session.lastMessagePreview}
