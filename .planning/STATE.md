@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 3 of 4 (Tool + Synapse Visualization)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-03-12 — Phase 2 Core Chat Loop verified and complete
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-03-13 — Completed 03-01-PLAN.md (tool/synapse data layer)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -57,6 +57,10 @@ Recent decisions affecting current work:
 - [02-02-C]: ChatWindow auto-scroll effect tracks messages.length AND chatStore.status
 - [02-03-A]: mode-watcher v1.x uses rune-based mode.current, not Svelte store $mode
 - [02-03-B]: highlight.js dark theme via .dark scoped CSS overrides (not CSS layers)
+- [03-01-A]: pendingToolCalls is a plain non-reactive field — write-only buffer during streaming, never read by UI
+- [03-01-B]: find_tool SSE events filtered by tool name equality at ingestion — UI never sees internal routing events
+- [03-01-C]: Synapse message phase set to 'complete' on done event as safety fallback if tasks_complete not received
+- [03-01-D]: durationMs is 0 for single-event tool calls (no separate start event in SSE model)
 
 ### Pending Todos
 
@@ -69,6 +73,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Phase 2 verified (5/5 must-haves, human-approved) — ready for Phase 3 planning
+Last session: 2026-03-13
+Stopped at: Completed 03-01-PLAN.md — tool/synapse data layer in ChatStore
 Resume file: None
