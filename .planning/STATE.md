@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 4 of 4 (Sessions, Health + Knowledge)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-13 — Completed 04-01 (sessions endpoints + typed API client)
+Last activity: 2026-03-13 — Completed 04-02 (session sidebar + health bar UI)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -30,10 +30,10 @@ Progress: [████████░░] 80%
 | 01-static-shell | 2 | ~8 min | ~4 min |
 | 02-core-chat-loop | 3 | ~11 min | ~3.7 min |
 | 03-tool-synapse-visualization | 3 | ~7 min | ~2.3 min |
-| 04-sessions-health-knowledge | 1/3 | ~3 min | ~3 min |
+| 04-sessions-health-knowledge | 2/3 | ~6 min | ~3 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01, 03-02, 03-03, 04-01
+- Last 5 plans: 03-02, 03-03, 04-01, 04-02
 - Trend: Fast — plans well-scoped, svelte-check catches issues early
 
 *Updated after each plan completion*
@@ -73,6 +73,11 @@ Recent decisions affecting current work:
 - [04-01-C]: fetchHealth returns degraded status object on network failure (never throws) — callers can always render UI
 - [04-01-D]: fetchModel returns 'Unknown' on any LM Studio failure (never throws) — graceful degradation for model display
 - [04-01-E]: RAG_BASE is a direct URL (not proxied) — document endpoints hit the RAG stack on port 8080 directly
+- [04-02-A]: resetSession() is single method for new chat (no arg) and switch session (with ID) — loadSession() delegates to it
+- [04-02-B]: resetSession() aborts in-flight fetch before clearing state — prevents stale SSE events landing in wrong session
+- [04-02-C]: RAG and Search share same errors[] parse but render as separate dots — matches user's three-indicator locked decision
+- [04-02-D]: Collapsed sidebar toggle is a fixed-position button outside aside element — stays clickable at max-width 0
+- [04-02-E]: Sidebar open by default per RESEARCH.md discretion recommendation
 
 ### Pending Todos
 
@@ -85,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13
-Stopped at: Completed 04-01-PLAN.md — sessions endpoints + typed API client
+Last session: 2026-03-13T05:48:12Z
+Stopped at: Completed 04-02-PLAN.md — session sidebar + health bar UI
 Resume file: None
