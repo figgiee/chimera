@@ -16,6 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Core Chat Loop** - Streaming chat experience with markdown, code highlighting, stop/cancel, and error handling
 - [x] **Phase 3: Tool + Synapse Visualization** - Inline tool call display and real-time Synapse workflow progress panel
 - [x] **Phase 4: Sessions, Health + Knowledge** - Session sidebar, system health bar, and knowledge base management
+- [ ] **Phase 5: Audit Gap Closure** - Fix failed task status, session history restore, and wire unused backend endpoints
 
 ## Phase Details
 
@@ -87,10 +88,25 @@ Plans:
 - [x] 04-03-PLAN.md — Build knowledge management sidebar tab and memory recall indicator
 - [x] 04-04-PLAN.md — Add last-message preview to session sidebar rows (gap closure)
 
+### Phase 5: Audit Gap Closure
+**Goal**: Close all gaps identified by milestone audit — fix failed task rendering, restore session message history on switch, and wire existing but unconsumed backend endpoints into the frontend
+**Depends on**: Phase 4
+**Requirements**: SYN-03 (complete failed variant), SESS-03 (session switch shows history)
+**Gap Closure**: Closes all gaps from v1.0-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. A Synapse task with status `'failed'` renders with a red XCircle icon and destructive styling (not a green checkmark)
+  2. User switches to an existing session and sees the prior message history (not a blank chat)
+  3. Dead `LoadingIndicator` import removed from +page.svelte (if present — audit may be false positive)
+  4. Session stats/logs data surfaced somewhere in the frontend UI (or endpoints removed if truly unneeded)
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01-PLAN.md — Fix SYN-03 failed variant, add session messages endpoint, wire session history restore, clean up tech debt
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -98,3 +114,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 2. Core Chat Loop | 3/3 | Complete | 2026-03-12 |
 | 3. Tool + Synapse Visualization | 3/3 | Complete | 2026-03-13 |
 | 4. Sessions, Health + Knowledge | 4/4 | Complete | 2026-03-13 |
+| 5. Audit Gap Closure | 0/1 | Planned | — |
