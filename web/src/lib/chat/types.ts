@@ -176,3 +176,33 @@ export interface SendMessageOptions {
   /** Optional session ID to continue an existing conversation. */
   sessionId?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4: Session, Health, Document, and Model types
+// ---------------------------------------------------------------------------
+
+/** Metadata for a session returned by GET /api/sessions. */
+export interface SessionInfo {
+  id: string;
+  title: string;
+  created: number;
+  lastActive: number;
+  messageCount: number;
+}
+
+/** Response from GET /api/health?deep=true. */
+export interface HealthStatus {
+  status: 'ok' | 'degraded';
+  sessions: number;
+  uptime: number;
+  errors?: string[];
+}
+
+/** A document in the knowledge base from GET /api/documents. */
+export interface KnowledgeDocument {
+  id: string;
+  filename: string;
+  source_type: string;
+  created_at: string;
+  content_preview: string;
+}
