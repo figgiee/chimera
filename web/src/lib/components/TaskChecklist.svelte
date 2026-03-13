@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Circle, Loader2, CheckCircle2 } from 'lucide-svelte';
+	import { Circle, Loader2, CheckCircle2, XCircle } from 'lucide-svelte';
 	import type { TaskItem } from '$lib/chat/types.js';
 
 	let { tasks }: { tasks: TaskItem[] } = $props();
@@ -23,6 +23,8 @@
 						<Circle size={14} class="mt-0.5 shrink-0 text-muted-foreground" />
 					{:else if task.status === 'running'}
 						<Loader2 size={14} class="mt-0.5 shrink-0 animate-spin text-primary" />
+					{:else if task.status === 'failed'}
+						<XCircle size={14} class="mt-0.5 shrink-0 text-destructive" />
 					{:else}
 						<CheckCircle2 size={14} class="mt-0.5 shrink-0 text-emerald-500" />
 					{/if}

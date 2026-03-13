@@ -56,7 +56,7 @@ export interface TaskItem {
   /** Human-readable description of what the task does. */
   description: string;
   /** Current execution status. */
-  status: 'pending' | 'running' | 'done';
+  status: 'pending' | 'running' | 'done' | 'failed';
   /** Brief preview of the task result, populated after completion. */
   responsePreview?: string;
 }
