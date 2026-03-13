@@ -1,3 +1,4 @@
+import { fetchSessionLogs, logsToMessages } from './api.js';
 import { streamChat } from './SSEClient.js';
 import type { ChatStatus, Message, SynapseState, ToolCall } from './types.js';
 
@@ -415,12 +416,15 @@ export class ChatStore {
 	/**
 	 * Switch the active session to an existing server-side session.
 	 *
-	 * Calls resetSession with the provided ID so subsequent sendMessage calls
-	 * are routed to that session. Messages are not pre-loaded — they will
-	 * appear once the user sends a new message and the server responds.
+	 * Resets chat state, then fetches and hydrates prior message history
+	 * from the /api/sessions/:id/logs endpoint. On failure, leaves the
+	 * chat empty (same behaviour as before hydration was added).
 	 */
-	loadSession = (sessionId: string): void => {
+	loadSession = async (sessionId: string): Promise<void> => {
 		this.resetSession(sessionId);
+		const logs = await fetchSessionLogs(sessionId);
+		const messages = logsToMessages(logs);
+		this.messages = messages;
 	};
 }
 

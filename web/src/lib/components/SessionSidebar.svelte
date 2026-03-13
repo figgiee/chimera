@@ -100,9 +100,9 @@
 		chatStore.resetSession();
 	}
 
-	function handleSwitchSession(session: SessionInfo): void {
+	async function handleSwitchSession(session: SessionInfo): Promise<void> {
 		if (deletingId === session.id) return; // ignore click on delete-confirm row
-		chatStore.loadSession(session.id);
+		await chatStore.loadSession(session.id);
 	}
 
 	async function handleConfirmDelete(id: string): Promise<void> {
