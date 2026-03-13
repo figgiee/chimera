@@ -62,12 +62,12 @@ Plans:
   3. User sees a workflow progress panel appear when Synapse activates, showing the current phase (Q&A / Planning / Executing)
   4. User sees clarification questions rendered as Q&A cards and a live task checklist with per-task status (pending/running/done/failed)
   5. User can cancel a running Synapse workflow via a stop button and the UI returns to idle
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Build ActivityPanel and ActivityEvent components — interpret tool, synapse_*, task_* SSE events; drive from ChatState.currentEvents
-- [ ] 03-02: Build collapsible tool call blocks with arguments/result display and "Show more" expansion
-- [ ] 03-03: Build Synapse Q&A cards, task checklist with live status, workflow cancel button wired to synapse_escalate
+- [ ] 03-01-PLAN.md — Extend types and ChatStore to capture tool call and Synapse SSE events into reactive state
+- [ ] 03-02-PLAN.md — Build collapsible ToolCallBlock component and wire into MessageBubble
+- [ ] 03-03-PLAN.md — Build SynapsePanel, QACard, TaskChecklist components and wire into ChatWindow
 
 ### Phase 4: Sessions, Health + Knowledge
 **Goal**: Users can manage multiple conversations from a sidebar, see system health at a glance, and upload and browse documents in the knowledge base
@@ -89,7 +89,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
