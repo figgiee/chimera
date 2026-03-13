@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 3 of 4 (Tool + Synapse Visualization)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-13 — Completed 03-02-PLAN.md (tool call block UI component)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-03-13 — Completed 03-03-PLAN.md (Synapse visualization components)
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6 (through 03-03)
 - Average duration: ~4 min/plan
-- Total execution time: ~19 min
+- Total execution time: ~22 min
 
 **By Phase:**
 
@@ -63,6 +63,9 @@ Recent decisions affecting current work:
 - [03-01-D]: durationMs is 0 for single-event tool calls (no separate start event in SSE model)
 - [03-02-A]: untrack() used for hadError prop at $state init — avoids state_referenced_locally Svelte 5 warning
 - [03-02-B]: Tool call blocks placed inside the assistant bubble wrapper above prose div — one bubble, tools then text
+- [03-03-A]: CheckCircle2 and MessageCircleQuestion are alias re-exports in lucide-svelte v0.577.0 (to circle-check.svelte and message-circle-question-mark.svelte) — named imports work as documented
+- [03-03-B]: ChatWindow dispatches on message.role to select renderer — SynapsePanel for 'synapse', MessageBubble for all other roles
+- [03-03-C]: SynapsePanel cancel (SYN-04) uses existing InputBar stop button — no new cancel UI needed inside panel
 
 ### Pending Todos
 
@@ -76,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 03-02-PLAN.md — ToolCallBlock component + MessageBubble wiring
+Stopped at: Completed 03-03-PLAN.md — Synapse visualization components (phase 3 complete)
 Resume file: None
