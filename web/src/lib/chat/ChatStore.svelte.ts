@@ -386,6 +386,42 @@ export class ChatStore {
 	registerAnimationCancel = (cancel: () => void): void => {
 		this.cancelAnimation = cancel;
 	};
+
+	/**
+	 * Reset the chat to a fresh state, optionally switching to a given session.
+	 *
+	 * Clears messages, status, activity, and errors.
+	 * If sessionId is provided, sets this.sessionId to it (switch session).
+	 * Otherwise generates a new UUID (new chat).
+	 *
+	 * Used by SessionSidebar for both "New chat" and "Switch session" actions.
+	 */
+	resetSession = (sessionId?: string): void => {
+		// Abort any in-flight request before resetting.
+		this.abortController?.abort();
+		this.abortController = null;
+		this.cancelAnimation?.();
+		this.cancelAnimation = null;
+
+		this.messages = [];
+		this.status = 'idle';
+		this.currentActivity = '';
+		this.lastError = '';
+		this.pendingToolCalls = [];
+		this.activeSynapseMessageId = null;
+		this.sessionId = sessionId ?? crypto.randomUUID();
+	};
+
+	/**
+	 * Switch the active session to an existing server-side session.
+	 *
+	 * Calls resetSession with the provided ID so subsequent sendMessage calls
+	 * are routed to that session. Messages are not pre-loaded — they will
+	 * appear once the user sends a new message and the server responds.
+	 */
+	loadSession = (sessionId: string): void => {
+		this.resetSession(sessionId);
+	};
 }
 
 /** Singleton ChatStore instance shared across the application. */
