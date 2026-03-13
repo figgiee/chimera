@@ -23,16 +23,16 @@
 
 ### Tool Call Display
 
-- [ ] **TOOL-01**: User sees inline collapsible blocks for each tool call showing tool name, status icon (spinner/checkmark/x), and duration
-- [ ] **TOOL-02**: User can expand a tool call block to see the tool's arguments and truncated result
-- [ ] **TOOL-03**: User can click "Show more" on long tool results to see the full output
+- [x] **TOOL-01**: User sees inline collapsible blocks for each tool call showing tool name, status icon (spinner/checkmark/x), and duration
+- [x] **TOOL-02**: User can expand a tool call block to see the tool's arguments and truncated result
+- [x] **TOOL-03**: User can click "Show more" on long tool results to see the full output
 
 ### Synapse Workflow Visualization
 
-- [ ] **SYN-01**: User sees a workflow progress panel when Synapse activates, showing current phase (Q&A / Planning / Executing)
-- [ ] **SYN-02**: User sees Q&A pairs rendered as structured cards (question + answer) during the clarification phase
-- [ ] **SYN-03**: User sees a task checklist with live status (pending/running/done/failed) during execution
-- [ ] **SYN-04**: User can cancel a running workflow via a stop button
+- [x] **SYN-01**: User sees a workflow progress panel when Synapse activates, showing current phase (Q&A / Planning / Executing)
+- [x] **SYN-02**: User sees Q&A pairs rendered as structured cards (question + answer) during the clarification phase
+- [x] **SYN-03**: User sees a task checklist with live status (pending/running/done/failed) during execution
+- [x] **SYN-04**: User can cancel a running workflow via a stop button
 
 ### Session Management
 

@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Static Shell** - SvelteKit scaffolding + Node.js static serving + backend /api/ prefix migration
 - [x] **Phase 2: Core Chat Loop** - Streaming chat experience with markdown, code highlighting, stop/cancel, and error handling
-- [ ] **Phase 3: Tool + Synapse Visualization** - Inline tool call display and real-time Synapse workflow progress panel
+- [x] **Phase 3: Tool + Synapse Visualization** - Inline tool call display and real-time Synapse workflow progress panel
 - [ ] **Phase 4: Sessions, Health + Knowledge** - Session sidebar, system health bar, and knowledge base management
 
 ## Phase Details
@@ -65,9 +65,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Extend types and ChatStore to capture tool call and Synapse SSE events into reactive state
-- [ ] 03-02-PLAN.md — Build collapsible ToolCallBlock component and wire into MessageBubble
-- [ ] 03-03-PLAN.md — Build SynapsePanel, QACard, TaskChecklist components and wire into ChatWindow
+- [x] 03-01-PLAN.md — Extend types and ChatStore to capture tool call and Synapse SSE events into reactive state
+- [x] 03-02-PLAN.md — Build collapsible ToolCallBlock component and wire into MessageBubble
+- [x] 03-03-PLAN.md — Build SynapsePanel, QACard, TaskChecklist components and wire into ChatWindow
 
 ### Phase 4: Sessions, Health + Knowledge
 **Goal**: Users can manage multiple conversations from a sidebar, see system health at a glance, and upload and browse documents in the knowledge base
@@ -95,5 +95,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Static Shell | 2/2 | Complete | 2026-03-12 |
 | 2. Core Chat Loop | 3/3 | Complete | 2026-03-12 |
-| 3. Tool + Synapse Visualization | 0/3 | Not started | - |
+| 3. Tool + Synapse Visualization | 3/3 | Complete | 2026-03-13 |
 | 4. Sessions, Health + Knowledge | 0/3 | Not started | - |
