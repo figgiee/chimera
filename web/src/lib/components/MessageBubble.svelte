@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Copy, Check, RotateCcw } from 'lucide-svelte';
+	import ToolCallBlock from './ToolCallBlock.svelte';
 	import type { Message } from '$lib/chat/types.js';
 	import { chatStore } from '$lib/chat/ChatStore.svelte.js';
 	import { animateStreaming, renderMarkdown, highlightCodeBlocks } from '$lib/chat/markdown.js';
@@ -154,6 +155,13 @@
 	<div class="group flex w-full justify-start">
 		<div class="relative max-w-[80%]">
 			<div class="rounded-2xl rounded-bl-sm bg-muted px-4 py-3 text-sm text-foreground">
+				{#if message.toolCalls?.length}
+					<div class="space-y-1.5 mb-3">
+						{#each message.toolCalls as toolCall (toolCall.id)}
+							<ToolCallBlock {toolCall} />
+						{/each}
+					</div>
+				{/if}
 				<div
 					bind:this={markdownContainer}
 					class="prose prose-sm dark:prose-invert max-w-none"
