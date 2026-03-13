@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 3 of 4 (Tool + Synapse Visualization)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-13 — Completed 03-01-PLAN.md (tool/synapse data layer)
+Last activity: 2026-03-13 — Completed 03-02-PLAN.md (tool call block UI component)
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -61,6 +61,8 @@ Recent decisions affecting current work:
 - [03-01-B]: find_tool SSE events filtered by tool name equality at ingestion — UI never sees internal routing events
 - [03-01-C]: Synapse message phase set to 'complete' on done event as safety fallback if tasks_complete not received
 - [03-01-D]: durationMs is 0 for single-event tool calls (no separate start event in SSE model)
+- [03-02-A]: untrack() used for hadError prop at $state init — avoids state_referenced_locally Svelte 5 warning
+- [03-02-B]: Tool call blocks placed inside the assistant bubble wrapper above prose div — one bubble, tools then text
 
 ### Pending Todos
 
@@ -74,5 +76,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 03-01-PLAN.md — tool/synapse data layer in ChatStore
+Stopped at: Completed 03-02-PLAN.md — ToolCallBlock component + MessageBubble wiring
 Resume file: None
