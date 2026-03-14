@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Shield } from 'lucide-svelte';
-	import { fetchHealth, fetchModel } from '$lib/chat/api.js';
+	import { fetchHealth } from '$lib/chat/api.js';
 	import type { HealthStatus } from '$lib/chat/types.js';
 
 	// ---------------------------------------------------------------------------
@@ -8,7 +8,10 @@
 	// ---------------------------------------------------------------------------
 
 	let health = $state<HealthStatus | null>(null);
-	let modelName = $state<string>('Loading...');
+
+	// Model name comes from /api/health.modelName — server-side fetch avoids
+	// cross-origin requests from the browser to LM Studio's port.
+	const modelName = $derived(health?.modelName ?? 'Loading...');
 
 	// ---------------------------------------------------------------------------
 	// Per-service health derivation
@@ -34,9 +37,7 @@
 	// ---------------------------------------------------------------------------
 
 	async function refresh(): Promise<void> {
-		const [h, m] = await Promise.all([fetchHealth(), fetchModel()]);
-		health = h;
-		modelName = m;
+		health = await fetchHealth();
 	}
 
 	$effect(() => {

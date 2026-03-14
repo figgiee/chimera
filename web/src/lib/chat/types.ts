@@ -184,8 +184,11 @@ export interface SessionInfo {
 /** Response from GET /api/health?deep=true. */
 export interface HealthStatus {
   status: 'ok' | 'degraded';
+  version?: string;
   sessions: number;
   uptime: number;
+  lmUrl?: string;
+  modelName?: string;
   errors?: string[];
 }
 

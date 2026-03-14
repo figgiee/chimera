@@ -197,7 +197,7 @@
 		{#if activeTab === 'sessions'}
 			<!-- Session list -->
 			<div class="flex-1 overflow-y-auto py-1">
-				{#if loadError}
+				{#if loadError && sessions.length === 0}
 					<div class="mx-3 my-2 flex items-center gap-2 rounded bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
 						<span class="flex-1">Failed to load sessions</span>
 						<button onclick={loadSessions} class="underline hover:no-underline">Retry</button>

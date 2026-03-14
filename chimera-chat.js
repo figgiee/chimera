@@ -288,7 +288,16 @@ async function handleRequest(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/health') {
     const deep = url.searchParams.get('deep') === 'true';
     const lmUrl = `http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}`;
-    const result = { status: 'ok', version: '0.1.0', sessions: sessions.size, uptime: Math.floor(process.uptime()), lmUrl };
+    // Fetch model name server-side so the browser never has to make a cross-origin request to LM Studio
+    let modelName = 'Unknown';
+    try {
+      const mr = await fetch(`${lmUrl}/v1/models`);
+      if (mr.ok) {
+        const md = await mr.json();
+        modelName = md.data?.[0]?.id ?? 'Unknown';
+      }
+    } catch {}
+    const result = { status: 'ok', version: '0.1.0', sessions: sessions.size, uptime: Math.floor(process.uptime()), lmUrl, modelName };
     if (deep) {
       const errors = await checkDeps();
       if (errors.length) { result.status = 'degraded'; result.errors = errors; }
