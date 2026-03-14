@@ -28,6 +28,16 @@ rag-setup/documents/*
 *.egg
 build/
 
+# Electron build output
+dist/
+out/
+release/
+
+# Chimera runtime data
+chimera-rag.db
+chimera-rag.db-shm
+chimera-rag.db-wal
+
 # Logs
 *.log
 

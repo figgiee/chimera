@@ -14,9 +14,9 @@ const { execSync } = require('node:child_process');
 
 // ─── Config ───────────────────────────────────────────────────────
 const LM_HOST = process.env.LM_HOST || '127.0.0.1';
-const LM_PORT = parseInt(process.env.LM_PORT || '1235');
+const LM_PORT = parseInt(process.env.LM_PORT || '11434');
 const LM_PATH = '/v1/chat/completions';
-const LM_MODEL = process.env.LM_MODEL || 'qwen/qwen3.5-9b';
+const LM_MODEL = process.env.LM_MODEL || 'chimera';
 const RAG_URL = process.env.RAG_URL || 'http://localhost:8080';
 const CMD_TIMEOUT = parseInt(process.env.CHIMERA_CMD_TIMEOUT || '60000');
 const _home = os.homedir().replace(/\\/g, '/');
@@ -269,7 +269,7 @@ function strip(content) {
 // ═══════════════════════════════════════════════════════════════════
 
 const INTENT_PATTERNS = {
-  build:    /\b(build|add|create|implement|make|develop|write)\b.*\b(tool|feature|app|function|module|component|endpoint|api|page|service|project)\b/i,
+  build:    /\b(build|add|create|implement|make|develop|write|generate)\b.*\b(tool|feature|app|application|function|module|component|endpoint|api|page|site|website|service|project|script|timer|game|dashboard|widget|form|cli|bot|server)\b/i,
   bugfix:   /\b(fix|broken|bug|crash|error|fail|wrong|issue|not working|doesn.t work)\b/i,
   research: /\b(research|evaluate|compare|investigate|analyze|benchmark|should we)\b/i,
   refactor: /\b(refactor|restructure|reorganize|clean ?up|technical debt)\b/i,
@@ -387,6 +387,8 @@ class ChimeraSession {
     this.toolsUsed = new Set();
     this.onEvent = onEvent || (() => {}); // callback for logging/UI
     this.signal = null; // AbortSignal from chat server
+    this.totalTokensUsed = 0;
+    this.lastPromptTokens = 0;
   }
 
   emit(type, data) { this.onEvent({ type, ...data }); }
@@ -451,6 +453,10 @@ class ChimeraSession {
       this._trimMessages();
       const r = await chat(this.messages);
       if (!r.choices?.[0]) return '[no response]';
+      // Track token usage (Ollama returns usage.total_tokens or prompt_eval_count + eval_count)
+      const tokensThisCall = r.usage?.total_tokens || (r.prompt_eval_count || 0) + (r.eval_count || 0);
+      if (tokensThisCall > 0) this.totalTokensUsed += tokensThisCall;
+      this.lastPromptTokens = r.usage?.prompt_tokens || r.prompt_eval_count || 0;
       const m = r.choices[0].message;
 
       if (m.tool_calls?.length > 0) {
@@ -489,16 +495,19 @@ class ChimeraSession {
           // Loop detection
           let hadError = false;
           this.toolsUsed.add(fnArgs.name);
+          const toolStartMs = Date.now();
           try {
             const result = await executeTool(fnArgs.name, toolArgs);
+            const durationMs = Date.now() - toolStartMs;
             this._trackSynapseState(fnArgs.name, result);
             toolResult = JSON.stringify(result, null, 2).slice(0, 3000);
             hadError = !!result.error;
-            this.emit('tool', { tool: fnArgs.name, args: toolArgs, result, hadError });
+            this.emit('tool', { tool: fnArgs.name, args: toolArgs, result, hadError, durationMs });
           } catch (e) {
+            const durationMs = Date.now() - toolStartMs;
             toolResult = `Error: ${e.message}`;
             hadError = true;
-            this.emit('tool', { tool: fnArgs.name, args: toolArgs, error: e.message });
+            this.emit('tool', { tool: fnArgs.name, args: toolArgs, error: e.message, durationMs });
           }
 
           const loopCheck = this.loopDetector.check(fnArgs.name, toolArgs, hadError);
@@ -514,6 +523,15 @@ class ChimeraSession {
         await sleep(1500);
       } else {
         const answer = strip(m.content);
+        // If the model produced only think-tag content (answer is empty/Acknowledged),
+        // and we've made tool calls, push a nudge to keep it going instead of stopping.
+        if ((answer === 'Acknowledged.' || answer === '') && this.toolCallCount > 0 && loops < maxLoops - 1) {
+          this.messages.push({ role: 'assistant', content: m.content });
+          this.messages.push({ role: 'user', content: '[SYSTEM: Continue — keep using tools until the task is fully complete.]' });
+          loops++;
+          await sleep(500);
+          continue;
+        }
         this.messages.push({ role: 'assistant', content: m.content });
         return answer;
       }
@@ -680,6 +698,8 @@ class ChimeraSession {
       toolCalls: this.toolCallCount,
       toolsUsed: [...this.toolsUsed],
       hasSynapseSession: !!this.activeSynapseSession,
+      tokensUsed: this.totalTokensUsed,
+      lastPromptTokens: this.lastPromptTokens,
     };
   }
 }

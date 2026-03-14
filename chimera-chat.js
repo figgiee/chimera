@@ -17,11 +17,16 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { ChimeraSession } = require('./chimera-orchestrator');
+const { startRagServer } = require('./chimera-rag');
 
 const CHIMERA_DIR = __dirname.replace(/\\/g, '/');
 
-const PORT = parseInt(process.env.CHIMERA_PORT || '3210');
-const HOST = process.env.CHIMERA_HOST || '127.0.0.1';
+const PORT    = parseInt(process.env.CHIMERA_PORT || '3210');
+const HOST    = process.env.CHIMERA_HOST || '127.0.0.1';
+const RAG_URL = process.env.RAG_URL || 'http://localhost:8080';
+
+// Context window size — fetched from Ollama /api/show at startup, used in health response
+let MODEL_CONTEXT_LENGTH = 32768;
 
 // ─── Static file serving ─────────────────────────────────────────
 const STATIC_DIR = path.resolve(__dirname, 'web/build');
@@ -101,7 +106,7 @@ function loadPersistedSessions() {
   } catch { /* sessions dir missing or unreadable */ }
 }
 
-function getOrCreateSession(sessionId, projectId) {
+async function getOrCreateSession(sessionId, projectId) {
   // Prune expired sessions
   const now = Date.now();
   for (const [id, s] of sessions) {
@@ -136,6 +141,29 @@ function getOrCreateSession(sessionId, projectId) {
 
   const entry = { session, created: now, lastActive: now, logs };
   sessions.set(sessionId, entry);
+
+  // Inject previous session handoff summary for known projects
+  const pid = projectId || 'chimera';
+  if (pid !== 'chimera') {
+    try {
+      const r = await fetch(`${RAG_URL}/api/projects/${encodeURIComponent(pid)}`);
+      if (r.ok) {
+        const proj = await r.json();
+        if (proj.handoff_summary) {
+          // Insert context after the system prompt so the model has prior session awareness
+          session.messages.splice(1, 0, {
+            role: 'user',
+            content: `[Context from previous session in this project: ${proj.handoff_summary}]`
+          });
+          session.messages.splice(2, 0, {
+            role: 'assistant',
+            content: 'Understood. I have context from our last session.'
+          });
+        }
+      }
+    } catch { /* non-critical */ }
+  }
+
   return entry;
 }
 
@@ -223,14 +251,62 @@ function sendJson(res, status, data) {
 async function checkDeps() {
   const errors = [];
   try {
-    const r = await fetch(`${process.env.RAG_URL || 'http://localhost:8080'}/health`);
+    const r = await fetch(`${RAG_URL}/health`);
     if (!r.ok) errors.push('RAG stack unhealthy');
   } catch { errors.push('RAG stack unreachable'); }
   try {
-    const r = await fetch(`http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}/v1/models`);
-    if (!r.ok) errors.push('LM Studio unhealthy');
-  } catch { errors.push('LM Studio unreachable'); }
+    const r = await fetch(`http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '11434'}/api/tags`);
+    if (!r.ok) errors.push('Ollama unhealthy');
+  } catch { errors.push('Ollama unreachable'); }
   return errors;
+}
+
+// ─── Fetch Ollama context window size ───────────────────────────
+async function fetchModelContextLength() {
+  try {
+    const lmUrl = `http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '11434'}`;
+    const r = await fetch(`${lmUrl}/api/show`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: process.env.LM_MODEL || 'chimera' }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const ctx = d.model_info?.['llama.context_length'] || d.parameters?.num_ctx;
+      if (typeof ctx === 'number' && ctx > 0) MODEL_CONTEXT_LENGTH = ctx;
+    }
+  } catch { /* use default */ }
+}
+
+// ─── Session handoff helpers ─────────────────────────────────────
+function generateHandoffSummary(entry) {
+  const { logs } = entry;
+  const userMsgs = logs.filter(l => l.type === 'user_message');
+  if (userMsgs.length < 3) return '';
+  const firstTopic = userMsgs[0]?.text?.slice(0, 100) || '';
+  const toolsUsed = [...new Set(
+    logs.filter(l => l.type === 'tool' && l.tool !== 'find_tool').map(l => l.tool)
+  )];
+  const synapseStart = logs.find(l => l.type === 'synapse_start');
+  const date = new Date().toISOString().slice(0, 10);
+  const parts = [`Last session (${date}): "${firstTopic}"`];
+  if (synapseStart?.mode) parts.push(`Used ${synapseStart.mode} workflow`);
+  if (toolsUsed.length) parts.push(`Tools: ${toolsUsed.slice(0, 5).join(', ')}`);
+  return parts.join('. ');
+}
+
+async function updateProjectHandoff(entry) {
+  const projectId = entry.session.projectId;
+  if (!projectId || projectId === 'chimera') return;
+  const summary = generateHandoffSummary(entry);
+  if (!summary) return;
+  try {
+    await fetch(`${RAG_URL}/api/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handoff_summary: summary }),
+    });
+  } catch { /* non-critical */ }
 }
 
 // ─── SSE helpers ─────────────────────────────────────────────────
@@ -238,7 +314,7 @@ function sendSSE(res, event, data) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-function serveStatic(req, res, pathname) {
+function serveStatic(_req, res, pathname) {
   const urlPath = pathname === '/' ? '/index.html' : pathname;
   const filePath = path.resolve(STATIC_DIR, `.${urlPath}`);
 
@@ -287,17 +363,17 @@ async function handleRequest(req, res) {
   // GET /api/health
   if (req.method === 'GET' && url.pathname === '/api/health') {
     const deep = url.searchParams.get('deep') === 'true';
-    const lmUrl = `http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}`;
-    // Fetch model name server-side so the browser never has to make a cross-origin request to LM Studio
+    const lmUrl = `http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '11434'}`;
+    // Fetch model name from Ollama's /api/tags endpoint server-side (avoids CORS)
     let modelName = 'Unknown';
     try {
-      const mr = await fetch(`${lmUrl}/v1/models`);
-      if (mr.ok) {
-        const md = await mr.json();
-        modelName = md.data?.[0]?.id ?? 'Unknown';
+      const tr = await fetch(`${lmUrl}/api/tags`);
+      if (tr.ok) {
+        const td = await tr.json();
+        modelName = td.models?.[0]?.name ?? 'Unknown';
       }
     } catch {}
-    const result = { status: 'ok', version: '0.1.0', sessions: sessions.size, uptime: Math.floor(process.uptime()), lmUrl, modelName };
+    const result = { status: 'ok', version: '0.3.0', sessions: sessions.size, uptime: Math.floor(process.uptime()), lmUrl, modelName, contextLength: MODEL_CONTEXT_LENGTH };
     if (deep) {
       const errors = await checkDeps();
       if (errors.length) { result.status = 'degraded'; result.errors = errors; }
@@ -315,7 +391,7 @@ async function handleRequest(req, res) {
       const messageCount = entry.logs.filter(l => l.type === 'user_message').length;
       const lastLog = entry.logs.length ? entry.logs[entry.logs.length - 1] : null;
       const lastMessagePreview = lastLog?.text ? (lastLog.text.length > 80 ? lastLog.text.slice(0, 80) + '...' : lastLog.text) : '';
-      sessionList.push({ id, title, created: entry.created, lastActive: entry.lastActive, messageCount, lastMessagePreview });
+      sessionList.push({ id, title, created: entry.created, lastActive: entry.lastActive, messageCount, lastMessagePreview, projectId: entry.session.projectId || null });
     }
     sessionList.sort((a, b) => b.lastActive - a.lastActive);
     sendJson(res, 200, { sessions: sessionList });
@@ -379,7 +455,7 @@ async function handleRequest(req, res) {
 
     try {
       // Create session with SSE-aware event handler
-      const entry = getOrCreateSession(sid, project_id);
+      const entry = await getOrCreateSession(sid, project_id);
       const { session } = entry;
       const originalOnEvent = session.onEvent;
       session.onEvent = (event) => {
@@ -400,6 +476,8 @@ async function handleRequest(req, res) {
         const doneEvent = { type: 'done', response, session_id: sid, stats: session.getStats() };
         entry.logs.push({ ts: Date.now(), ...doneEvent });
         persistSession(sid);
+        // Non-blocking: update project handoff summary after session
+        updateProjectHandoff(entry).catch(() => {});
         sendSSE(res, 'done', doneEvent);
         res.end();
       }
@@ -451,7 +529,7 @@ async function handleRequest(req, res) {
     }, 5 * 60 * 1000);
 
     try {
-      const entry = getOrCreateSession(sid, project_id);
+      const entry = await getOrCreateSession(sid, project_id);
       const { session } = entry;
       session.signal = abort.signal; // orchestrator checks this
       const response = await session.processMessage(message, {
@@ -490,17 +568,18 @@ async function handleRequest(req, res) {
   }
 
   // ─── RAG proxy — forwards /api/rag/* to the RAG stack ──────────
-  const RAG_URL = process.env.RAG_URL || 'http://localhost:8080';
+  const isRagPath     = url.pathname.startsWith('/api/rag/');
+  const isProjectPath = url.pathname.startsWith('/api/projects');
 
-  if (url.pathname.startsWith('/api/rag/')) {
-    const ragPath = url.pathname.replace('/api/rag', '/api');
+  if (isRagPath || isProjectPath) {
+    const ragPath = isRagPath ? url.pathname.replace('/api/rag', '/api') : url.pathname;
     const ragUrl = `${RAG_URL}${ragPath}${url.search}`;
 
     try {
       const headers = {};
       if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
 
-      // Collect request body for POST/PUT/DELETE
+      // Collect request body for POST/PUT/PATCH/DELETE
       let body = null;
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         const chunks = [];
@@ -532,29 +611,6 @@ async function handleRequest(req, res) {
 // ─── Server ──────────────────────────────────────────────────────
 const server = http.createServer(handleRequest);
 
-loadPersistedSessions();
-
-server.listen(PORT, HOST, () => {
-  console.log(`\n  Chimera Chat Server`);
-  console.log(`  ───────────────────`);
-  console.log(`  Listening: http://${HOST}:${PORT}`);
-  console.log(`  LM Studio: http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '1235'}`);
-  console.log(`  RAG:       ${process.env.RAG_URL || 'http://localhost:8080'}`);
-  console.log(`\n  POST /api/chat         { message, session_id?, project_id?, working_dir? }`);
-  console.log(`  POST /api/chat/stream  Same as /api/chat but returns SSE events`);
-  console.log(`  GET  /api/health       ?deep=true to check dependencies`);
-  console.log(`  GET  /api/sessions             List all sessions (sorted by lastActive)`);
-  console.log(`  DELETE /api/sessions/:id       Delete a session`);
-  console.log(`  GET  /api/sessions/:id/logs`);
-  console.log(`  *    /api/rag/*            Proxied to RAG stack\n`);
-
-  // Warn if exposed beyond localhost — Chimera has no authentication
-  if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
-    console.warn(`  ⚠  WARNING: CHIMERA_HOST=${HOST} — server is exposed beyond localhost.`);
-    console.warn(`     Chimera has no authentication. Do not expose on a public network.\n`);
-  }
-});
-
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
     console.error(`Port ${PORT} is in use. Set CHIMERA_PORT env var.`);
@@ -563,3 +619,40 @@ server.on('error', (e) => {
   }
   process.exit(1);
 });
+
+async function main() {
+  loadPersistedSessions();
+
+  // Start embedded RAG server (replaces Docker stack)
+  try {
+    await startRagServer();
+  } catch (e) {
+    console.warn(`  RAG:       unavailable — ${e.message}`);
+    console.warn(`             Run: npm install  to install RAG dependencies`);
+  }
+
+  // Fetch model context window size (non-blocking — uses default if Ollama not ready yet)
+  fetchModelContextLength().catch(() => {});
+
+  server.listen(PORT, HOST, () => {
+    console.log(`\n  Chimera Chat Server`);
+    console.log(`  ───────────────────`);
+    console.log(`  Listening: http://${HOST}:${PORT}`);
+    console.log(`  Ollama:    http://${process.env.LM_HOST || '127.0.0.1'}:${process.env.LM_PORT || '11434'}`);
+    console.log(`\n  POST /api/chat         { message, session_id?, project_id?, working_dir? }`);
+    console.log(`  POST /api/chat/stream  Same as /api/chat but returns SSE events`);
+    console.log(`  GET  /api/health       ?deep=true to check dependencies`);
+    console.log(`  GET  /api/sessions             List all sessions (sorted by lastActive)`);
+    console.log(`  DELETE /api/sessions/:id       Delete a session`);
+    console.log(`  GET  /api/sessions/:id/logs`);
+    console.log(`  *    /api/rag/*            Proxied to RAG stack\n`);
+
+    // Warn if exposed beyond localhost — Chimera has no authentication
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      console.warn(`  ⚠  WARNING: CHIMERA_HOST=${HOST} — server is exposed beyond localhost.`);
+      console.warn(`     Chimera has no authentication. Do not expose on a public network.\n`);
+    }
+  });
+}
+
+main().catch(e => { console.error('Startup failed:', e); process.exit(1); });

@@ -24,7 +24,7 @@
 	 * RAG and Search share the same backend signal (RAG stack errors) but render as separate dots.
 	 */
 	const lmHealthy = $derived(
-		health === null ? null : !health.errors?.some((e) => /LM Studio/i.test(e))
+		health === null ? null : !health.errors?.some((e) => /Ollama/i.test(e))
 	);
 	const ragHealthy = $derived(
 		health === null ? null : !health.errors?.some((e) => /RAG/i.test(e))
@@ -50,7 +50,7 @@
 <div class="flex items-center gap-4 border-b border-border px-4 py-1.5 text-xs shrink-0 bg-background">
 	<!-- Service indicators -->
 	<div class="flex items-center gap-3">
-		<!-- LM Studio -->
+		<!-- Ollama -->
 		<span class="flex items-center gap-1.5">
 			<span
 				class="w-2 h-2 rounded-full transition-colors duration-300 {lmHealthy === false
@@ -58,7 +58,7 @@
 					: 'bg-green-500'}"
 			></span>
 			<span class="text-muted-foreground">
-				LM Studio
+				Ollama
 				{#if lmHealthy === false}
 					<span class="text-red-500">offline</span>
 				{/if}

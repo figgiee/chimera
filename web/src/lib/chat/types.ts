@@ -171,6 +171,16 @@ export type SSEEventMap = {
 // Phase 4: Session, Health, Document, and Model types
 // ---------------------------------------------------------------------------
 
+/** A project returned by GET /api/projects. */
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  created_at: number;
+  updated_at: number;
+  handoff_summary: string;
+}
+
 /** Metadata for a session returned by GET /api/sessions. */
 export interface SessionInfo {
   id: string;
@@ -179,6 +189,7 @@ export interface SessionInfo {
   lastActive: number;
   messageCount: number;
   lastMessagePreview: string;
+  projectId: string | null;
 }
 
 /** Response from GET /api/health?deep=true. */
@@ -189,6 +200,7 @@ export interface HealthStatus {
   uptime: number;
   lmUrl?: string;
   modelName?: string;
+  contextLength?: number;
   errors?: string[];
 }
 

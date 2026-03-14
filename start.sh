@@ -22,6 +22,13 @@ if ! command -v node &>/dev/null; then
   exit 1
 fi
 
+# ── Ollama check (warn, don't block) ─────────────────────────────────────────
+if ! command -v ollama &>/dev/null; then
+  echo -e "${YELLOW}[WARN]${NC} Ollama not found. Install from https://ollama.com"
+  echo "       Then run: ollama pull qwen3:8b && ollama pull nomic-embed-text"
+  echo ""
+fi
+
 # ── Kill stale process on port 3210 ──────────────────────────────────────────
 if lsof -ti:3210 &>/dev/null; then
   echo "[CLEANUP] Killing stale process on port 3210..."
@@ -29,13 +36,10 @@ if lsof -ti:3210 &>/dev/null; then
   sleep 1
 fi
 
-# ── RAG stack (optional) ─────────────────────────────────────────────────────
-if command -v docker &>/dev/null && [ -f "$SCRIPT_DIR/rag-setup/docker-compose.yml" ]; then
-  echo "[1/3] Starting RAG stack..."
-  docker compose -f "$SCRIPT_DIR/rag-setup/docker-compose.yml" up -d 2>/dev/null && echo "      Started." || echo -e "${YELLOW}[WARN]${NC} RAG stack failed to start. Continuing without it."
-else
-  echo "[1/3] Skipping RAG stack (Docker not found or no compose file)."
-fi
+# ── Install dependencies ──────────────────────────────────────────────────────
+echo "[1/3] Installing dependencies..."
+cd "$SCRIPT_DIR"
+npm install --prefer-offline
 
 # ── Web frontend build ────────────────────────────────────────────────────────
 echo "[2/3] Building web frontend..."
@@ -51,6 +55,10 @@ echo "  =============================="
 echo -e "    Chimera is running at:"
 echo -e "    ${GREEN}http://localhost:3210${NC}"
 echo "  =============================="
+echo ""
+echo "  Requires Ollama running with:"
+echo "    ollama pull qwen3:8b"
+echo "    ollama pull nomic-embed-text"
 echo ""
 echo "  Press Ctrl+C to stop."
 echo ""

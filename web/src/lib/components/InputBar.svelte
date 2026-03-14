@@ -2,6 +2,15 @@
 	import { ArrowUp, Square } from 'lucide-svelte';
 	import { chatStore } from '$lib/chat/ChatStore.svelte.js';
 
+	// Token count display derived from chatStore state
+	const tokenPct = $derived(
+		chatStore.contextLength > 0 ? chatStore.lastPromptTokens / chatStore.contextLength : 0
+	);
+	const tokenColor = $derived(
+		tokenPct >= 0.9 ? 'text-red-500' : tokenPct >= 0.7 ? 'text-amber-500' : 'text-muted-foreground/60'
+	);
+	const showTokens = $derived(chatStore.lastPromptTokens > 0);
+
 	// Local input state.
 	let inputText = $state('');
 
@@ -63,6 +72,16 @@
 </script>
 
 <div class="border-t border-border bg-background px-4 py-4">
+	<!-- Token count indicator -->
+	{#if showTokens}
+		<div class="mx-auto mb-1 flex w-full max-w-3xl justify-end">
+			<span class="text-[11px] tabular-nums {tokenColor}">
+				{chatStore.lastPromptTokens.toLocaleString()} / {chatStore.contextLength.toLocaleString()} ctx
+				({Math.round(tokenPct * 100)}%)
+			</span>
+		</div>
+	{/if}
+
 	<div class="mx-auto flex w-full max-w-3xl items-end gap-2">
 		<!-- Auto-resize textarea -->
 		<textarea

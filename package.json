@@ -1,13 +1,60 @@
 {
   "name": "chimera",
-  "version": "0.1.0",
-  "description": "Fully local AI assistant with agentic tools, RAG, and web search",
-  "main": "chimera-chat.js",
+  "version": "0.3.0",
+  "description": "Fully local AI assistant — agentic tools, RAG, and Synapse structured workflows",
+  "main": "electron-main.js",
   "scripts": {
     "start": "node chimera-chat.js",
+    "dev": "electron .",
+    "build:web": "cd web && npm run build",
+    "build:app": "npm run build:web && electron-builder",
     "test": "node tests/run_tests.js"
   },
-  "keywords": ["ai", "local-ai", "rag", "llm", "mcp", "agentic"],
+  "keywords": ["ai", "local-ai", "rag", "llm", "ollama", "agentic", "electron"],
   "author": "Chimera",
-  "license": "MIT"
+  "license": "MIT",
+  "build": {
+    "appId": "com.chimera.app",
+    "productName": "Chimera",
+    "asar": false,
+    "files": [
+      "electron-main.js",
+      "chimera-chat.js",
+      "chimera-orchestrator.js",
+      "chimera-rag.js",
+      "node_modules/**/*",
+      "web/build/**/*"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "icon": "assets/icon.png",
+      "category": "Development"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "busboy": "^1.6.0",
+    "duck-duck-scrape": "^2.2.7",
+    "sqlite-vec": "^0.1.7-alpha.2"
+  },
+  "devDependencies": {
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1"
+  }
 }

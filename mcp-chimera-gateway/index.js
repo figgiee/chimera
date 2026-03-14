@@ -11,7 +11,6 @@ const os = require("node:os");
 const { execSync } = require("node:child_process");
 
 const RAG_URL = process.env.RAG_SERVER_URL || "http://localhost:8080";
-const SEARXNG_URL = process.env.SEARXNG_URL || "http://localhost:8888";
 const _home = os.homedir().replace(/\\/g, '/');
 const CMD_TIMEOUT = parseInt(process.env.CHIMERA_CMD_TIMEOUT || "30000");
 const ALLOWED_DIRS = (process.env.ALLOWED_DIRS || `${_home}/Desktop,${_home}/Documents,${_home}/Downloads`).split(",");

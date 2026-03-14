@@ -6,9 +6,7 @@
  * LM Studio model info is fetched directly from LM_BASE.
  */
 
-import type { SessionInfo, HealthStatus, KnowledgeDocument, Message, ToolCall, SynapseState } from './types.js';
-
-// LM Studio URL is served by the backend via /api/health — do not hardcode here
+import type { SessionInfo, HealthStatus, KnowledgeDocument, Message, ToolCall, SynapseState, Project } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Sessions  (chimera-chat.js, same origin)
@@ -265,23 +263,50 @@ export async function fetchHealth(): Promise<HealthStatus> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Projects  (proxied through chimera-chat.js at /api/projects/*)
+// ---------------------------------------------------------------------------
+
 /**
- * Fetch the currently loaded model name from LM Studio via the backend health endpoint.
- * Uses /api/health to get the LM Studio URL so the port is never hardcoded in the frontend.
- * Returns 'Unknown' on any failure — never throws.
+ * Fetch all projects, sorted by last updated descending.
+ * Throws if the request fails.
  */
-export async function fetchModel(): Promise<string> {
-  try {
-    const health = await fetch('/api/health');
-    if (!health.ok) return 'Unknown';
-    const { lmUrl } = await health.json() as { lmUrl?: string };
-    if (!lmUrl) return 'Unknown';
-    const res = await fetch(`${lmUrl}/v1/models`);
-    if (!res.ok) return 'Unknown';
-    const data = await res.json() as { data?: Array<{ id: string }> };
-    return data.data?.[0]?.id ?? 'Unknown';
-  } catch {
-    return 'Unknown';
+export async function fetchProjects(): Promise<Project[]> {
+  const res = await fetch('/api/projects');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  const data = await res.json() as { projects: Project[] };
+  return data.projects;
+}
+
+/**
+ * Create a new project.
+ * Throws if the request fails.
+ */
+export async function createProject(name: string, description?: string): Promise<Project> {
+  const res = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description: description ?? '' })
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<Project>;
+}
+
+/**
+ * Delete a project by ID.
+ * Throws if the project is not found or request fails.
+ */
+export async function deleteProject(id: string): Promise<void> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   }
 }
 

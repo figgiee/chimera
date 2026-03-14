@@ -33,10 +33,13 @@
 	});
 
 	// Resolved display duration: prefer toolCall.durationMs when done/error.
+	const rawDurationMs = $derived(
+		toolCall.status === 'running' ? elapsedMs : (toolCall.durationMs ?? elapsedMs)
+	);
 	const displayDuration = $derived(
-		toolCall.status === 'running'
-			? elapsedMs
-			: (toolCall.durationMs ?? elapsedMs)
+		rawDurationMs >= 1000
+			? `${(rawDurationMs / 1000).toFixed(1)}s`
+			: `${rawDurationMs}ms`
 	);
 
 	// Stringified result for truncation logic.
@@ -77,7 +80,7 @@
 		<span class="flex-1 text-sm font-medium text-foreground truncate">{toolCall.tool}</span>
 
 		<!-- Elapsed / duration -->
-		<span class="text-xs text-muted-foreground flex-shrink-0">{displayDuration}ms</span>
+		<span class="text-xs text-muted-foreground flex-shrink-0">{displayDuration}</span>
 
 		<!-- Chevron -->
 		<span

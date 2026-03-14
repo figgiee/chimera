@@ -1,28 +1,42 @@
 <script lang="ts">
-	import { Plus, Trash2, X, PanelLeftClose, PanelLeftOpen } from 'lucide-svelte';
+	import { ChevronDown, FolderOpen, Plus, Trash2, X, PanelLeftClose, PanelLeftOpen } from 'lucide-svelte';
 	import { chatStore } from '$lib/chat/ChatStore.svelte.js';
-	import { fetchSessions, deleteSession } from '$lib/chat/api.js';
-	import type { SessionInfo } from '$lib/chat/types.js';
+	import { fetchSessions, deleteSession, fetchProjects, createProject, deleteProject } from '$lib/chat/api.js';
+	import type { SessionInfo, Project } from '$lib/chat/types.js';
 	import KnowledgeSidebar from './KnowledgeSidebar.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
 	// ---------------------------------------------------------------------------
 
-	let sidebarOpen = $state(true);
-	let sessions = $state<SessionInfo[]>([]);
-	let deletingId = $state<string | null>(null);
-	let activeTab = $state<'sessions' | 'knowledge'>('sessions');
-	let switching = $state(false);
-	let loadError = $state(false);
-	let errorRetryDelay = 30_000; // starts at 30s, backs off on repeated failures
+	let sidebarOpen    = $state(true);
+	let sessions       = $state<SessionInfo[]>([]);
+	let projects       = $state<Project[]>([]);
+	let deletingId     = $state<string | null>(null);
+	let activeTab      = $state<'sessions' | 'knowledge'>('sessions');
+	let switching      = $state(false);
+	let loadError      = $state(false);
+	let projectPickerOpen = $state(false);
+	let newProjectName = $state('');
+	let creatingProject = $state(false);
+	let errorRetryDelay = 30_000;
+
+	// ---------------------------------------------------------------------------
+	// Derived: sessions filtered by current project
+	// ---------------------------------------------------------------------------
+
+	const visibleSessions = $derived(
+		chatStore.currentProject
+			? sessions.filter((s) => s.projectId === chatStore.currentProject!.id)
+			: sessions
+	);
 
 	// ---------------------------------------------------------------------------
 	// Session grouping helpers
 	// ---------------------------------------------------------------------------
 
 	function relativeTime(ts: number): string {
-		const diff = ts - Date.now(); // negative = past
+		const diff = ts - Date.now();
 		const abs = Math.abs(diff);
 		const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 		if (abs < 60_000) return 'just now';
@@ -37,72 +51,87 @@
 		return d.getTime();
 	}
 
-	interface SessionGroup {
-		label: string;
-		sessions: SessionInfo[];
-	}
+	interface SessionGroup { label: string; sessions: SessionInfo[]; }
 
 	function groupSessions(list: SessionInfo[]): SessionGroup[] {
 		const now = Date.now();
 		const todayStart = startOfDay(now);
 		const yesterdayStart = todayStart - 86_400_000;
 		const sevenDaysAgo = todayStart - 7 * 86_400_000;
-
-		const today: SessionInfo[] = [];
-		const yesterday: SessionInfo[] = [];
-		const lastWeek: SessionInfo[] = [];
-		const older: SessionInfo[] = [];
-
+		const today: SessionInfo[] = [], yesterday: SessionInfo[] = [],
+			lastWeek: SessionInfo[] = [], older: SessionInfo[] = [];
 		for (const s of list) {
 			const ts = s.lastActive;
-			if (ts >= todayStart) {
-				today.push(s);
-			} else if (ts >= yesterdayStart) {
-				yesterday.push(s);
-			} else if (ts >= sevenDaysAgo) {
-				lastWeek.push(s);
-			} else {
-				older.push(s);
-			}
+			if (ts >= todayStart) today.push(s);
+			else if (ts >= yesterdayStart) yesterday.push(s);
+			else if (ts >= sevenDaysAgo) lastWeek.push(s);
+			else older.push(s);
 		}
-
 		const groups: SessionGroup[] = [];
-		if (today.length > 0) groups.push({ label: 'Today', sessions: today });
-		if (yesterday.length > 0) groups.push({ label: 'Yesterday', sessions: yesterday });
-		if (lastWeek.length > 0) groups.push({ label: 'Previous 7 Days', sessions: lastWeek });
-		if (older.length > 0) groups.push({ label: 'Older', sessions: older });
+		if (today.length)     groups.push({ label: 'Today', sessions: today });
+		if (yesterday.length) groups.push({ label: 'Yesterday', sessions: yesterday });
+		if (lastWeek.length)  groups.push({ label: 'Previous 7 Days', sessions: lastWeek });
+		if (older.length)     groups.push({ label: 'Older', sessions: older });
 		return groups;
 	}
 
-	const sessionGroups = $derived(groupSessions(sessions));
+	const sessionGroups = $derived(groupSessions(visibleSessions));
 
 	// ---------------------------------------------------------------------------
-	// Session loading + polling
+	// Data loading
 	// ---------------------------------------------------------------------------
 
-	async function loadSessions(): Promise<void> {
+	async function loadAll(): Promise<void> {
 		try {
-			sessions = await fetchSessions();
+			[sessions, projects] = await Promise.all([fetchSessions(), fetchProjects()]);
 			loadError = false;
-			errorRetryDelay = 30_000; // reset backoff on success
+			errorRetryDelay = 30_000;
 		} catch {
 			loadError = true;
-			errorRetryDelay = Math.min(errorRetryDelay * 2, 300_000); // cap at 5 min
+			errorRetryDelay = Math.min(errorRetryDelay * 2, 300_000);
 		}
 	}
 
 	$effect(() => {
-		loadSessions();
+		loadAll();
 		let timer: ReturnType<typeof setTimeout>;
 		function schedule() {
-			timer = setTimeout(async () => {
-				await loadSessions();
-				schedule();
-			}, errorRetryDelay);
+			timer = setTimeout(async () => { await loadAll(); schedule(); }, errorRetryDelay);
 		}
 		schedule();
 		return () => clearTimeout(timer);
 	});
+
+	// ---------------------------------------------------------------------------
+	// Project actions
+	// ---------------------------------------------------------------------------
+
+	function selectProject(p: Project | null): void {
+		projectPickerOpen = false;
+		chatStore.setProject(p);
+	}
+
+	async function handleCreateProject(): Promise<void> {
+		const name = newProjectName.trim();
+		if (!name || creatingProject) return;
+		creatingProject = true;
+		try {
+			const p = await createProject(name);
+			projects = [p, ...projects];
+			newProjectName = '';
+			chatStore.setProject(p);
+			projectPickerOpen = false;
+		} finally {
+			creatingProject = false;
+		}
+	}
+
+	async function handleDeleteProject(p: Project, e: MouseEvent): Promise<void> {
+		e.stopPropagation();
+		await deleteProject(p.id).catch(() => {});
+		projects = projects.filter((x) => x.id !== p.id);
+		if (chatStore.currentProject?.id === p.id) chatStore.setProject(null);
+	}
 
 	// ---------------------------------------------------------------------------
 	// Session actions
@@ -116,39 +145,27 @@
 	async function handleSwitchSession(session: SessionInfo): Promise<void> {
 		if (deletingId === session.id || switching) return;
 		switching = true;
-		try {
-			await chatStore.loadSession(session.id);
-		} finally {
-			switching = false;
-		}
+		try { await chatStore.loadSession(session.id); }
+		finally { switching = false; }
 	}
 
 	async function handleConfirmDelete(id: string): Promise<void> {
-		try {
-			await deleteSession(id);
-		} catch {
-			// Silent fail — optimistic removal still proceeds
-		}
+		try { await deleteSession(id); } catch { /* silent */ }
 		sessions = sessions.filter((s) => s.id !== id);
-		if (chatStore.sessionId === id) {
-			chatStore.resetSession();
-		}
+		if (chatStore.sessionId === id) chatStore.resetSession();
 		deletingId = null;
 	}
 
-	function handleCancelDelete(): void {
-		deletingId = null;
-	}
+	function handleCancelDelete(): void { deletingId = null; }
 </script>
 
-<!-- Sidebar: always in DOM, max-width transition collapses it without removing from flow -->
+<!-- Sidebar -->
 <aside
 	class="transition-[max-width] duration-200 ease-in-out overflow-hidden border-r border-border flex flex-col bg-background shrink-0"
 	style="max-width: {sidebarOpen ? '256px' : '0px'};"
 >
-	<!-- Inner wrapper keeps content at a fixed width so it clips cleanly during collapse -->
 	<div class="w-64 flex flex-col h-full">
-		<!-- Sidebar header: toggle + new chat -->
+		<!-- Header: collapse + new chat -->
 		<div class="flex items-center gap-2 px-3 py-3 shrink-0">
 			<button
 				onclick={() => (sidebarOpen = !sidebarOpen)}
@@ -173,6 +190,72 @@
 			</button>
 		</div>
 
+		<!-- Project selector -->
+		<div class="px-3 pb-2 shrink-0">
+			<button
+				onclick={() => (projectPickerOpen = !projectPickerOpen)}
+				class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-border text-xs transition-colors hover:bg-accent"
+			>
+				<FolderOpen size={13} class="shrink-0 text-primary" />
+				<span class="flex-1 text-left truncate font-medium">
+					{chatStore.currentProject?.name ?? 'All sessions'}
+				</span>
+				<ChevronDown size={13} class="shrink-0 text-muted-foreground transition-transform {projectPickerOpen ? 'rotate-180' : ''}" />
+			</button>
+
+			{#if projectPickerOpen}
+				<div class="mt-1 rounded-md border border-border bg-background shadow-lg overflow-hidden">
+					<!-- All sessions option -->
+					<button
+						onclick={() => selectProject(null)}
+						class="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2 {!chatStore.currentProject ? 'font-medium text-foreground' : 'text-muted-foreground'}"
+					>
+						All sessions
+					</button>
+
+					{#if projects.length > 0}
+						<div class="border-t border-border">
+							{#each projects as p (p.id)}
+								<div class="group flex items-center">
+									<button
+										onclick={() => selectProject(p)}
+										class="flex-1 text-left px-3 py-2 text-xs hover:bg-accent transition-colors truncate {chatStore.currentProject?.id === p.id ? 'font-medium text-foreground' : 'text-muted-foreground'}"
+									>
+										{p.name}
+									</button>
+									<button
+										onclick={(e) => handleDeleteProject(p, e)}
+										class="p-1.5 mr-1 opacity-0 group-hover:opacity-100 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
+										aria-label="Delete project"
+									>
+										<Trash2 size={11} />
+									</button>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<!-- New project input -->
+					<div class="border-t border-border px-2 py-1.5 flex gap-1">
+						<input
+							bind:value={newProjectName}
+							onkeydown={(e) => e.key === 'Enter' && handleCreateProject()}
+							placeholder="New project..."
+							class="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
+						/>
+						<button
+							onclick={handleCreateProject}
+							disabled={!newProjectName.trim() || creatingProject}
+							class="p-1 rounded hover:bg-accent disabled:opacity-40 transition-colors"
+							aria-label="Create project"
+						>
+							<Plus size={12} />
+						</button>
+					</div>
+				</div>
+			{/if}
+		</div>
+
 		<!-- Tab row -->
 		<div class="flex border-b border-border shrink-0">
 			<button
@@ -195,16 +278,17 @@
 
 		<!-- Tab content -->
 		{#if activeTab === 'sessions'}
-			<!-- Session list -->
 			<div class="flex-1 overflow-y-auto py-1">
 				{#if loadError && sessions.length === 0}
 					<div class="mx-3 my-2 flex items-center gap-2 rounded bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
 						<span class="flex-1">Failed to load sessions</span>
-						<button onclick={loadSessions} class="underline hover:no-underline">Retry</button>
+						<button onclick={loadAll} class="underline hover:no-underline">Retry</button>
 					</div>
 				{/if}
 				{#if sessionGroups.length === 0 && !loadError}
-					<p class="px-3 py-4 text-xs text-muted-foreground">No sessions yet</p>
+					<p class="px-3 py-4 text-xs text-muted-foreground">
+						{chatStore.currentProject ? 'No sessions in this project yet' : 'No sessions yet'}
+					</p>
 				{:else}
 					{#each sessionGroups as group (group.label)}
 						<div class="mb-1">
@@ -216,15 +300,12 @@
 								{@const isDeleting = deletingId === session.id}
 
 								{#if isDeleting}
-									<!-- Delete confirmation row -->
 									<div class="mx-2 mb-0.5 flex items-center gap-1 px-2 py-1.5 rounded bg-destructive/10 text-xs">
 										<span class="flex-1 text-destructive font-medium">Delete?</span>
 										<button
 											onclick={() => handleConfirmDelete(session.id)}
 											class="px-2 py-0.5 rounded bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors text-xs font-medium"
-										>
-											Delete
-										</button>
+										>Delete</button>
 										<button
 											onclick={handleCancelDelete}
 											class="p-0.5 rounded hover:bg-accent transition-colors text-muted-foreground"
@@ -234,7 +315,6 @@
 										</button>
 									</div>
 								{:else}
-									<!-- Normal session row -->
 									<div class="group mx-2 mb-0.5 relative">
 										<button
 											onclick={() => handleSwitchSession(session)}
@@ -247,14 +327,18 @@
 											{#if session.lastMessagePreview}
 												<span class="truncate text-[11px] text-muted-foreground/70 leading-tight">{session.lastMessagePreview}</span>
 											{/if}
-											<span class="text-[10px] text-muted-foreground">{relativeTime(session.lastActive)}</span>
+											<div class="flex items-center gap-2">
+												<span class="text-[10px] text-muted-foreground">{relativeTime(session.lastActive)}</span>
+												{#if !chatStore.currentProject && session.projectId}
+													{@const proj = projects.find((p) => p.id === session.projectId)}
+													{#if proj}
+														<span class="text-[10px] bg-primary/10 text-primary px-1 rounded">{proj.name}</span>
+													{/if}
+												{/if}
+											</div>
 										</button>
-										<!-- Trash icon, visible on hover -->
 										<button
-											onclick={(e) => {
-												e.stopPropagation();
-												deletingId = session.id;
-											}}
+											onclick={(e) => { e.stopPropagation(); deletingId = session.id; }}
 											class="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
 											aria-label="Delete session"
 										>
@@ -268,7 +352,6 @@
 				{/if}
 			</div>
 		{:else}
-			<!-- Knowledge tab -->
 			<div class="flex-1 overflow-hidden">
 				<KnowledgeSidebar />
 			</div>
@@ -276,7 +359,7 @@
 	</div>
 </aside>
 
-<!-- Collapsed-state toggle button: visible when sidebar is closed -->
+<!-- Collapsed-state toggle -->
 {#if !sidebarOpen}
 	<button
 		onclick={() => (sidebarOpen = true)}

@@ -1,6 +1,6 @@
-import { fetchSessionLogs, logsToMessages } from './api.js';
+import { fetchHealth, fetchSessionLogs, logsToMessages } from './api.js';
 import { streamChat } from './SSEClient.js';
-import type { ChatStatus, Message, SynapseState, ToolCall } from './types.js';
+import type { ChatStatus, Message, Project, SynapseState, ToolCall } from './types.js';
 
 /**
  * Reactive ChatStore using Svelte 5 runes pattern.
@@ -37,6 +37,15 @@ export class ChatStore {
 
 	/** Current session ID. Rotates on new conversations (not yet exposed in UI). */
 	sessionId = $state<string>(crypto.randomUUID());
+
+	/** Active project. Null = no project selected (shows all sessions). */
+	currentProject = $state<Project | null>(null);
+
+	/** Token count from the last LLM response (prompt tokens). */
+	lastPromptTokens = $state<number>(0);
+
+	/** Model context window size, fetched from /api/health on first use. */
+	contextLength = $state<number>(32768);
 
 	// -----------------------------------------------------------------------
 	// Non-reactive fields
@@ -132,9 +141,7 @@ export class ChatStore {
 						hadError: Boolean(d.hadError),
 						status: d.result !== undefined || d.hadError ? 'done' : 'running',
 						startedAt: Date.now(),
-						// Single-event tools don't expose a start time, so durationMs stays undefined
-						// for 'running' calls and is 0 for instantly-resolved calls.
-						durationMs: d.result !== undefined || d.hadError ? 0 : undefined
+						durationMs: typeof d.durationMs === 'number' ? d.durationMs : (d.result !== undefined || d.hadError ? 0 : undefined)
 					};
 					this.pendingToolCalls = [...this.pendingToolCalls, toolCall];
 					this.currentActivity = `Using: ${d.tool}`;
@@ -247,6 +254,12 @@ export class ChatStore {
 						this.sessionId = d.session_id;
 					}
 
+					// Update token count from stats
+					const stats = d.stats as Record<string, unknown> | undefined;
+					if (typeof stats?.lastPromptTokens === 'number' && stats.lastPromptTokens > 0) {
+						this.lastPromptTokens = stats.lastPromptTokens;
+					}
+
 					// If a synapse workflow is open but never received tasks_complete, mark it complete now.
 					if (this.activeSynapseMessageId) {
 						this.updateSynapseMessage((state) =>
@@ -294,10 +307,11 @@ export class ChatStore {
 		};
 
 		try {
-			await streamChat(text, this.sessionId, onEvent, controller.signal);
+			await streamChat(text, this.sessionId, onEvent, controller.signal, this.currentProject?.id);
 		} catch (e: unknown) {
 			// AbortError = user hit Stop — do not show as an error.
-			if (e instanceof Error && e.name === 'AbortError') return;
+			// Also swallow NetworkError/TypeError thrown by browsers when a fetch is aborted mid-stream.
+			if (e instanceof Error && (e.name === 'AbortError' || controller.signal.aborted)) return;
 
 			const message = e instanceof Error ? e.message : 'Unknown error';
 			this.status = 'error';
@@ -434,9 +448,37 @@ export class ChatStore {
 	 */
 	loadSession = async (sessionId: string): Promise<void> => {
 		this.resetSession(sessionId);
+		// Yield to let any in-flight abort settle before hydrating messages,
+		// preventing stale state from a previous stream racing with the new logs.
+		await new Promise(r => setTimeout(r, 50));
+		// Bail if the session changed again while we were waiting.
+		if (this.sessionId !== sessionId) return;
 		const logs = await fetchSessionLogs(sessionId);
+		if (this.sessionId !== sessionId) return;
 		const messages = logsToMessages(logs);
 		this.messages = messages;
+	};
+
+	/**
+	 * Set the active project. Resets the session so the next message
+	 * goes to a fresh session scoped to that project.
+	 */
+	setProject = (project: Project | null): void => {
+		this.currentProject = project;
+		this.resetSession();
+	};
+
+	/**
+	 * Fetch context window size from health endpoint.
+	 * Called once on init by the page component so InputBar can show X/Y tokens.
+	 */
+	initContextLength = async (): Promise<void> => {
+		try {
+			const health = await fetchHealth();
+			if (health.contextLength && health.contextLength > 0) {
+				this.contextLength = health.contextLength;
+			}
+		} catch { /* use default */ }
 	};
 }
 

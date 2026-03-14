@@ -16,12 +16,13 @@ export async function streamChat(
 	message: string,
 	sessionId: string | undefined,
 	onEvent: (type: string, data: unknown) => void,
-	signal: AbortSignal
+	signal: AbortSignal,
+	projectId?: string | null
 ): Promise<void> {
 	const response = await fetch('/api/chat/stream', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ message, session_id: sessionId }),
+		body: JSON.stringify({ message, session_id: sessionId, project_id: projectId ?? undefined }),
 		signal
 	});
 
