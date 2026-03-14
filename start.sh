@@ -38,15 +38,11 @@ else
 fi
 
 # ── Web frontend build ────────────────────────────────────────────────────────
-if [ ! -d "$SCRIPT_DIR/web/build" ]; then
-  echo "[2/3] Building web frontend (first run)..."
-  cd "$SCRIPT_DIR/web"
-  npm install
-  npm run build
-  cd "$SCRIPT_DIR"
-else
-  echo "[2/3] Web frontend already built."
-fi
+echo "[2/3] Building web frontend..."
+cd "$SCRIPT_DIR/web"
+npm install --prefer-offline
+npm run build
+cd "$SCRIPT_DIR"
 
 # ── Start server ─────────────────────────────────────────────────────────────
 echo "[3/3] Starting Chimera server..."

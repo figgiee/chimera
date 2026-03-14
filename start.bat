@@ -37,17 +37,11 @@ goto :check_build
 echo       Skipped (no Docker or no compose file).
 
 :check_build
-:: Build web frontend if needed
-if exist "%~dp0web\build" goto :build_exists
-echo [2/3] Building web frontend (first run)...
+echo [2/3] Building web frontend...
 cd /d "%~dp0web"
-call npm install
+call npm install --prefer-offline
 call npm run build
 cd /d "%~dp0"
-goto :start
-
-:build_exists
-echo [2/3] Web frontend already built.
 
 :start
 echo [3/3] Starting Chimera server...
